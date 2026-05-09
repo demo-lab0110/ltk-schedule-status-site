@@ -215,6 +215,7 @@ function inferPlayerMatchKeys(rows) {
   const keys = Object.keys(sample);
   const damageKey = keys.find((key, index) => index > 13 && numberValue(sample[key]) >= 1000) || keys[15];
   const damageIndex = keys.indexOf(damageKey);
+  const cs15Key = keys.find((key) => clean(key).includes("15") && clean(key).toUpperCase().includes("CS"));
   return {
     matchId: keys[0],
     team: keys[3],
@@ -227,7 +228,7 @@ function inferPlayerMatchKeys(rows) {
     deaths: keys.find((key) => key === "D") || keys[12],
     assists: keys.find((key) => key === "A") || keys[13],
     damage: damageKey,
-    cs15: keys[damageIndex + 1],
+    cs15: cs15Key || keys[damageIndex + 3] || keys[damageIndex + 2] || keys[damageIndex + 1],
     gold: keys[keys.length - 1]
   };
 }
