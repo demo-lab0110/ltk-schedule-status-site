@@ -439,7 +439,7 @@ function calendarEventTitle(item) {
     const games = item.resultRecord?.games ? ` ${item.resultRecord.games}G` : "";
     return `${viewerHomeLabel(item)} vs ${VIEWER_OPPONENT_LABEL}${games}`;
   }
-  const base = `${item.left || "TBD"} vs ${item.right || "TBD"}`;
+  const base = `${teamShortName(item.left)} vs ${teamShortName(item.right)}`;
   if (!item.resultRecord) return base;
   return `${base} ${item.resultRecord.leftWins}-${item.resultRecord.rightWins}`;
 }
@@ -614,7 +614,8 @@ function calendarTeamLabel(teamKey, tier) {
 
 function calendarTeamIcon(teamKey) {
   const team = teams[teamKey];
-  if (!team?.logo) return `<span class="fc-team-mark">${teamKey || "?"}</span>`;
+  if (!team) return "";
+  if (!team.logo) return `<span class="fc-team-mark">${team.mark || teamKey || "?"}</span>`;
   return `<img class="fc-team-mark" src="${team.logo}" alt="${team.name}">`;
 }
 
@@ -1508,8 +1509,7 @@ function isViewerScrim(item) {
     || item?.right === VIEWER_TEAM_KEY
     || item?.left === VIEWER_TEAM_KEY
     || item?.type === "対視聴者"
-    || item?.matchName === "対視聴者"
-    || (!item?.left || !item?.right) && item?.resultSource;
+    || item?.matchName === "対視聴者";
 }
 
 function competitiveScrimResults() {
@@ -1660,7 +1660,7 @@ function leagueRowHeader(teamKey, tier) {
 
 function dialogTeamBlock(teamKey, tier) {
   const team = teams[teamKey];
-  if (!team) return `<div class="dialog-team">TBD</div>`;
+  if (!team) return dialogTextTeamBlock(teamKey, tier);
   return `
     <div class="dialog-team" style="--team:${team.accent}">
       ${teamLogo(teamKey, "dialog-team-logo")}
