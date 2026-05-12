@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260511-01";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260512-01";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1037,7 +1037,7 @@ function playerStatsColumns() {
   return [
     { key: "name", label: "Player", value: (item) => item.name, render: (item) => playerStatsIdentity(item) },
     { key: "tier", label: "Tier", value: (item) => item.tier, render: (item) => item.tier },
-    { key: "matches", label: "Games", numeric: true, value: (item) => item.matches, render: (item) => formatDecimal(item.matches) },
+    { key: "matches", label: "Games", numeric: true, value: (item) => item.matches, render: (item) => formatInteger(item.matches) },
     { key: "record", label: "W-L", value: (item) => item.wins / item.matches, render: (item) => `${item.wins}-${item.matches - item.wins}` },
     { key: "kda", label: "KDA", numeric: true, value: (item) => item.kda, render: (item) => formatDecimal(item.kda) },
     { key: "kills", label: "K", numeric: true, value: (item) => item.avgKills, render: (item) => formatDecimal(item.avgKills) },
@@ -1047,7 +1047,7 @@ function playerStatsColumns() {
     { key: "cs15", label: "CS@15", numeric: true, value: (item) => item.avgCs15, render: (item) => item.avgCs15 == null ? "-" : formatDecimal(item.avgCs15) },
     { key: "dpm", label: "DPM", numeric: true, value: (item) => item.dpm, render: (item) => item.dpm == null ? "-" : formatDecimal(item.dpm) },
     { key: "damageShare", label: "DMG%", numeric: true, value: (item) => item.damageShare, render: (item) => percent(item.damageShare) },
-    { key: "championCount", label: "Champ", numeric: true, value: (item) => item.championCount, render: (item) => formatDecimal(item.championCount) }
+    { key: "championCount", label: "Champ", numeric: true, value: (item) => item.championCount, render: (item) => formatInteger(item.championCount) }
   ];
 }
 
@@ -1247,7 +1247,7 @@ function rankingTier(tier, rows) {
     rankingList("15分時点のCS", rows.filter((item) => item.avgCs15 != null), "avgCs15", formatDecimal, "desc", "CS@15"),
     rankingList("分間ダメージ", rows.filter((item) => item.dpm != null), "dpm", formatDecimal, "desc", "DPM"),
     rankingList("ダメージ割合", rows, "damageShare", percent, "desc", "DMG%"),
-    rankingList("使用チャンピオン数", rows, "championCount", formatDecimal, "desc", "Champ")
+    rankingList("使用チャンピオン数", rows, "championCount", formatInteger, "desc", "Champ")
   );
   return section;
 }
@@ -1817,7 +1817,11 @@ function denormalizeChampionName(value) {
 }
 
 function formatNumber(value) {
-  return new Intl.NumberFormat("ja-JP", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(truncateOneDecimal(value));
+  return formatInteger(value);
+}
+
+function formatInteger(value) {
+  return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(Math.trunc(Number(value) || 0));
 }
 
 function formatDecimal(value) {
@@ -1837,6 +1841,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
