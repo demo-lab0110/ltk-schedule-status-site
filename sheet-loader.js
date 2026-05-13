@@ -135,6 +135,7 @@ function buildSchedules(rows) {
     .map((row) => {
       const rawLeft = clean(row.left_team_key);
       const rawRight = clean(row.right_team_key);
+      const matchType = clean(row.match_type);
       return {
         id: clean(row.schedule_id),
         date: dateValue(row.event_date),
@@ -143,7 +144,8 @@ function buildSchedules(rows) {
         displayTitle: clean(row.display_title),
         day: clean(row.day_label),
         match: clean(row.match_no),
-        type: clean(row.match_type),
+        type: matchType,
+        matchType,
         stage: clean(row.stage) || "GROUP",
         tier: tierValue(row.tier),
         left: isViewerTeamName(rawLeft) ? VIEWER_TEAM_KEY : rawLeft,
@@ -207,8 +209,10 @@ function buildScrimResults(rows, teamRows, lookup) {
         rightGold: numberValue(row["チーム2ゴールド"]),
         carry: clean(row["最大ダメージ選手"]),
         maxDamage: numberValue(row["最大ダメージ"]),
+        mvp: clean(row.MVP),
         eventId: clean(row["イベントID"]),
         matchKind,
+        matchType: matchKind,
         resultImageUrl: clean(row["リザルト画像URL"]),
         bpImageUrl: clean(row["BP画像URL"]),
         minute15ImageUrl: clean(row["15分画像URL"]),

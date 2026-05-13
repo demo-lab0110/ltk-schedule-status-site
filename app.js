@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260512-01";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260512-02";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -382,6 +382,7 @@ function buildCalendarItems() {
         day: "RESULT",
         match: "Scrim",
         type: result.type || "スクリム結果",
+        matchType: result.matchType || result.matchKind || result.type || "",
         stage: "RESULT",
         matchName: result.matchName || "スクリム",
         tier: result.tier,
@@ -1012,9 +1013,9 @@ function renderPlayerStats() {
       </tr>
     </thead>
     <tbody>
-      ${rows.map((item) => `
+      ${rows.map((item, rowIndex) => `
         <tr>
-          ${columns.map((column) => `<td class="${column.numeric ? "is-numeric" : ""}">${column.render(item)}</td>`).join("")}
+          ${columns.map((column) => `<td class="${column.numeric ? "is-numeric" : ""}">${column.render(item, rowIndex)}</td>`).join("")}
         </tr>
       `).join("")}
     </tbody>
@@ -1030,37 +1031,235 @@ function renderPlayerStats() {
       renderPlayerStats();
     });
   });
+  table.querySelectorAll("[data-player-detail]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const item = rows[Number(button.dataset.playerDetail)];
+      if (item) openPlayerDetail(item);
+    });
+  });
   elements.playerStats.replaceChildren(table);
 }
 
 function playerStatsColumns() {
   return [
-    { key: "name", label: "Player", value: (item) => item.name, render: (item) => playerStatsIdentity(item) },
+    { key: "name", label: "Player", value: (item) => item.name, render: (item, index) => playerStatsIdentity(item, index) },
     { key: "tier", label: "Tier", value: (item) => item.tier, render: (item) => item.tier },
     { key: "matches", label: "Games", numeric: true, value: (item) => item.matches, render: (item) => formatInteger(item.matches) },
     { key: "record", label: "W-L", value: (item) => item.wins / item.matches, render: (item) => `${item.wins}-${item.matches - item.wins}` },
+    { key: "mvp", label: "MVP", numeric: true, value: (item) => item.mvp, render: (item) => formatInteger(item.mvp) },
     { key: "kda", label: "KDA", numeric: true, value: (item) => item.kda, render: (item) => formatDecimal(item.kda) },
     { key: "kills", label: "K", numeric: true, value: (item) => item.avgKills, render: (item) => formatDecimal(item.avgKills) },
     { key: "deaths", label: "D", numeric: true, value: (item) => item.avgDeaths, render: (item) => formatDecimal(item.avgDeaths) },
     { key: "assists", label: "A", numeric: true, value: (item) => item.avgAssists, render: (item) => formatDecimal(item.avgAssists) },
     { key: "kp", label: "KP", numeric: true, value: (item) => item.killParticipation, render: (item) => percent(item.killParticipation) },
-    { key: "cs15", label: "CS@15", numeric: true, value: (item) => item.avgCs15, render: (item) => item.avgCs15 == null ? "-" : formatDecimal(item.avgCs15) },
+    { key: "cs15", label: "CS@15", numeric: true, value: (item) => item.avgCs15, render: (item) => item.avgCs15 == null ? "-" : formatInteger(item.avgCs15) },
     { key: "dpm", label: "DPM", numeric: true, value: (item) => item.dpm, render: (item) => item.dpm == null ? "-" : formatDecimal(item.dpm) },
     { key: "damageShare", label: "DMG%", numeric: true, value: (item) => item.damageShare, render: (item) => percent(item.damageShare) },
     { key: "championCount", label: "Champ", numeric: true, value: (item) => item.championCount, render: (item) => formatInteger(item.championCount) }
   ];
 }
 
-function playerStatsIdentity(item) {
+function playerStatsIdentity(item, index) {
   return `
-    <span class="stats-identity">
+    <button class="stats-identity stats-identity-button" type="button" data-player-detail="${index}" aria-label="${item.name}の詳細を表示">
       ${playerIcon(item.name)}
       <span class="stats-identity-text">
         <strong>${item.name}</strong>
         <small>${teamLogo(item.team, "ranking-team-logo")}${teamShortName(item.team)} / ${item.role}</small>
       </span>
+    </button>
+  `;
+}
+
+function openPlayerDetail(item) {
+  const rows = competitivePlayerMatches()
+    .filter((row) => row.name === item.name && row.team === item.team && row.role === item.role)
+    .sort((a, b) => {
+      const left = scrimResults.find((match) => match.id === a.matchId);
+      const right = scrimResults.find((match) => match.id === b.matchId);
+      return String(left?.date || "").localeCompare(String(right?.date || ""))
+        || String(left?.match || "").localeCompare(String(right?.match || ""), "ja", { numeric: true });
+    });
+  elements.dialogMeta.textContent = `Player / ${item.tier} / ${item.role}`;
+  elements.dialogTitle.textContent = item.name;
+
+  const body = document.createElement("section");
+  body.className = "player-detail";
+  body.innerHTML = `
+    <div class="player-detail-head" style="--team:${teams[item.team]?.accent || "#64748b"}">
+      ${playerIcon(item.name)}
+      <div>
+        <strong>${item.name}</strong>
+        <span>${teamLogo(item.team, "ranking-team-logo")}${teamFullName(item.team)} / ${item.tier} / ${item.role}</span>
+      </div>
+    </div>
+    <div class="player-detail-metrics">
+      ${playerMetric("試合", formatInteger(item.matches))}
+      ${playerMetric("勝敗", `${item.wins}-${item.matches - item.wins}`)}
+      ${playerMetric("勝率", percent(item.wins / item.matches))}
+      ${playerMetric("MVP", formatInteger(item.mvp))}
+      ${playerMetric("KDA", formatDecimal(item.kda))}
+      ${playerMetric("DPM", item.dpm == null ? "-" : formatDecimal(item.dpm))}
+      ${playerMetric("CS@15", item.avgCs15 == null ? "-" : formatInteger(item.avgCs15))}
+    </div>
+    ${playerChampionTable(rows)}
+    ${playerMatchLog(rows)}
+  `;
+  elements.dialogBody.replaceChildren(body);
+  elements.dialog.showModal();
+}
+
+function playerMetric(label, value) {
+  return `<div><span>${label}</span><strong>${value}</strong></div>`;
+}
+
+function playerChampionTable(rows) {
+  const champions = playerChampionStats(rows);
+  if (!champions.length) return `<section class="player-detail-section"><h3>使用チャンピオン</h3><p class="muted">該当データなし</p></section>`;
+  return `
+    <section class="player-detail-section">
+      <h3>使用チャンピオン</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table player-champion-table">
+          <thead>
+            <tr>
+              <th>Champion</th>
+              <th>Games</th>
+              <th>W-L</th>
+              <th>Win%</th>
+              <th>KDA</th>
+              <th>K</th>
+              <th>D</th>
+              <th>A</th>
+              <th>DPM</th>
+              <th>CS@15</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${champions.map((champion) => `
+              <tr>
+                <td><span class="game-champion">${champIcon(champion.name)}<span>${champion.name}</span></span></td>
+                <td>${formatInteger(champion.matches)}</td>
+                <td>${champion.wins}-${champion.matches - champion.wins}</td>
+                <td>${percent(champion.wins / champion.matches)}</td>
+                <td>${formatDecimal(champion.kda)}</td>
+                <td>${formatDecimal(champion.avgKills)}</td>
+                <td>${formatDecimal(champion.avgDeaths)}</td>
+                <td>${formatDecimal(champion.avgAssists)}</td>
+                <td>${champion.dpm == null ? "-" : formatDecimal(champion.dpm)}</td>
+                <td>${champion.avgCs15 == null ? "-" : formatInteger(champion.avgCs15)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function playerChampionStats(rows) {
+  const map = new Map();
+  rows.forEach((row) => {
+    if (!row.champion) return;
+    if (!map.has(row.champion)) {
+      map.set(row.champion, { name: row.champion, matches: 0, wins: 0, kills: 0, deaths: 0, assists: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0 });
+    }
+    const item = map.get(row.champion);
+    item.matches += 1;
+    item.wins += row.result === "WIN" ? 1 : 0;
+    item.kills += row.kills;
+    item.deaths += row.deaths;
+    item.assists += row.assists;
+    const minutes = matchDurationMinutes(row.matchId);
+    if (minutes) {
+      item.dpmDamage += row.damage;
+      item.dpmMinutes += minutes;
+    }
+    if (Number.isFinite(row.cs15) && row.cs15 > 0) {
+      item.cs15 += row.cs15;
+      item.cs15Matches += 1;
+    }
+  });
+  return [...map.values()]
+    .map((item) => ({
+      ...item,
+      kda: item.deaths === 0 ? item.kills + item.assists : (item.kills + item.assists) / item.deaths,
+      avgKills: item.kills / item.matches,
+      avgDeaths: item.deaths / item.matches,
+      avgAssists: item.assists / item.matches,
+      dpm: item.dpmMinutes ? item.dpmDamage / item.dpmMinutes : null,
+      avgCs15: item.cs15Matches ? item.cs15 / item.cs15Matches : null
+    }))
+    .sort((a, b) => b.matches - a.matches || b.wins / b.matches - a.wins / a.matches || a.name.localeCompare(b.name, "ja"));
+}
+
+function playerMatchLog(rows) {
+  if (!rows.length) return `<section class="player-detail-section"><h3>試合ログ</h3><p class="muted">該当データなし</p></section>`;
+  return `
+    <section class="player-detail-section">
+      <h3>試合ログ</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table player-log-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Match</th>
+              <th>Result</th>
+              <th>Champion</th>
+              <th>KDA</th>
+              <th>DPM</th>
+              <th>CS@15</th>
+              <th>Opponent</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => {
+              const match = scrimResults.find((item) => item.id === row.matchId);
+              const minutes = matchDurationMinutes(row.matchId);
+              const opponent = opponentLaneRow(row);
+              return `
+                <tr>
+                  <td>${shortDate(match?.date || row.date)}</td>
+                  <td>${playerMatchLabel(row, match)}</td>
+                  <td>${row.result}</td>
+                  <td><span class="game-champion">${champIcon(row.champion)}<span>${row.champion}</span></span></td>
+                  <td>${row.kills}/${row.deaths}/${row.assists}</td>
+                  <td>${minutes ? formatDecimal(row.damage / minutes) : "-"}</td>
+                  <td>${Number.isFinite(row.cs15) && row.cs15 > 0 ? formatInteger(row.cs15) : "-"}</td>
+                  <td>${opponent ? `<span class="game-champion opponent-champion"><em>vs</em>${champIcon(opponent.champion)}<span>${opponent.champion}</span></span>` : "-"}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function playerMatchLabel(row, match) {
+  if (!match) return row.matchId;
+  const opponent = row.team === match.left ? match.right : row.team === match.right ? match.left : "";
+  if (opponent === VIEWER_TEAM_KEY) {
+    return `
+      <span class="player-match-label is-listener">
+        <span>${VIEWER_OPPONENT_LABEL}</span>
+        <small>${match.match || match.id}</small>
+      </span>
+    `;
+  }
+  return `
+    <span class="player-match-label">
+      ${opponent && opponent !== VIEWER_TEAM_KEY ? teamLogo(opponent, "ranking-team-logo") : ""}
+      <span>${opponent === VIEWER_TEAM_KEY ? VIEWER_OPPONENT_LABEL : teamFullName(opponent)}</span>
+      <small>${match.match || match.id}</small>
     </span>
   `;
+}
+
+function opponentLaneRow(row) {
+  const matchRows = playerMatches.filter((item) => item.matchId === row.matchId);
+  return matchRows.find((item) => item.role === row.role && item.team !== row.team) || null;
 }
 
 function sortPlayerStats(rows, column) {
@@ -1200,6 +1399,7 @@ function openLeagueResults(resultIdsValue) {
     day: "RESULT",
     match: gameRangeLabel(results),
     type: first.type || "スクリム",
+    matchType: first.matchType || first.matchKind || first.type || "",
     stage: "RESULT",
     matchName: first.matchName || "スクリム",
     tier: first.tier,
@@ -1240,11 +1440,12 @@ function rankingTier(tier, rows) {
   }
   section.append(
     rankingList("平均KDA", rows, "kda", formatDecimal, "desc", "KDA"),
+    rankingList("MVP数", rows, "mvp", formatInteger, "desc", "MVP"),
     rankingList("平均キル数", rows, "avgKills", formatDecimal, "desc", "K"),
     rankingList("平均デス数", rows, "avgDeaths", formatDecimal, "asc", "D"),
     rankingList("平均アシスト数", rows, "avgAssists", formatDecimal, "desc", "A"),
     rankingList("キル関与率", rows, "killParticipation", percent, "desc", "KP"),
-    rankingList("15分時点のCS", rows.filter((item) => item.avgCs15 != null), "avgCs15", formatDecimal, "desc", "CS@15"),
+    rankingList("15分時点のCS", rows.filter((item) => item.avgCs15 != null), "avgCs15", formatInteger, "desc", "CS@15"),
     rankingList("分間ダメージ", rows.filter((item) => item.dpm != null), "dpm", formatDecimal, "desc", "DPM"),
     rankingList("ダメージ割合", rows, "damageShare", percent, "desc", "DMG%"),
     rankingList("使用チャンピオン数", rows, "championCount", formatInteger, "desc", "Champ")
@@ -1382,14 +1583,16 @@ function championDetailRows(title, rows, winsOnly) {
 
 function buildPlayerStats() {
   const map = new Map();
+  const resultById = new Map(scrimResults.map((row) => [row.id, row]));
   competitivePlayerMatches().forEach((row) => {
     const key = row.name;
     if (!map.has(key)) {
-      map.set(key, { name: row.name, team: row.team, tier: row.tier, role: row.role, matches: 0, wins: 0, kills: 0, deaths: 0, assists: 0, damage: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0, gold: 0, champions: new Set() });
+      map.set(key, { name: row.name, team: row.team, tier: row.tier, role: row.role, matches: 0, wins: 0, mvp: 0, kills: 0, deaths: 0, assists: 0, damage: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0, gold: 0, champions: new Set() });
     }
     const item = map.get(key);
     item.matches += 1;
     item.wins += row.result === "WIN" ? 1 : 0;
+    item.mvp += resultById.get(row.matchId)?.mvp === row.name ? 1 : 0;
     item.kills += row.kills;
     item.deaths += row.deaths;
     item.assists += row.assists;
@@ -1448,7 +1651,7 @@ function mergeChampionStats(rows) {
   rows.forEach((row) => {
     if (!row.champion) return;
     if (!map.has(row.champion)) {
-      map.set(row.champion, { champion: row.champion, tiers: new Set(), roles: new Set(), picks: 0, bans: 0, wins: 0 });
+      map.set(row.champion, { champion: row.champion, tiers: new Set(), roles: new Set(), picks: 0, bans: 0, wins: 0, presenceMatches: new Set() });
     }
     const item = map.get(row.champion);
     item.tiers.add(row.tier);
@@ -1456,16 +1659,17 @@ function mergeChampionStats(rows) {
     if (row.type === "PICK") item.picks += 1;
     if (row.type === "BAN") item.bans += 1;
     if (row.win) item.wins += 1;
+    if (row.matchId) item.presenceMatches.add(row.matchId);
   });
   return [...map.values()].map((item) => ({
     ...item,
     tiers: [...item.tiers],
     roles: [...item.roles],
-    presence: item.picks + item.bans,
+    presence: item.presenceMatches.size,
     matchCount,
     pickRate: item.picks / matchCount,
     banRate: item.bans / matchCount,
-    presenceRate: (item.picks + item.bans) / matchCount,
+    presenceRate: item.presenceMatches.size / matchCount,
     winRate: item.picks ? item.wins / item.picks : 0
   }))
     .sort((a, b) => (b.picks + b.bans) - (a.picks + a.bans) || b.picks - a.picks);
@@ -1494,9 +1698,7 @@ function isScrimCalendarItem(item) {
 }
 
 function isScrimLikeItem(item) {
-  const text = [item?.type, item?.matchName, item?.match, item?.stage]
-    .filter(Boolean)
-    .join(" ");
+  const text = String(item?.matchType || item?.type || "");
   return text.includes("スクリム") || text.includes("Scrim") || text.includes("繧ｹ繧ｯ");
 }
 
@@ -1841,6 +2043,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
