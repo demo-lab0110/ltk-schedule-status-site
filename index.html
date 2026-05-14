@@ -14,8 +14,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=20260513-01">
-    <script type="module" src="./app.js?v=20260513-01"></script>
+    <link rel="stylesheet" href="./styles.css?v=20260515-01">
+    <script type="module" src="./app.js?v=20260515-01"></script>
   </head>
   <body>
     <header class="topbar">
@@ -35,8 +35,7 @@
         <nav class="view-tabs main-tabs" aria-label="メインナビゲーション">
           <button class="tab-button is-active" data-view="calendar">予定</button>
           <button class="tab-button" data-view="league">リーグ表</button>
-          <button class="tab-button" data-view="players">ランキング</button>
-          <button class="tab-button" data-view="stats">個人スタッツ</button>
+          <button class="tab-button" data-view="stats">個人成績</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
         </nav>
         <button id="filterToggle" class="filter-toggle-button nav-filter-toggle" type="button">隠す</button>
@@ -88,14 +87,6 @@
         <div id="calendarGrid" class="calendar-grid"></div>
       </section>
 
-      <section id="playersView" class="view" aria-label="ランキング">
-        <div class="section-heading">
-          <h2>個人ランキング</h2>
-          <p>画像から取得できたKDA、DPM、15分CSを階級別に集計します。</p>
-        </div>
-        <div id="rankingBoard" class="ranking-board"></div>
-      </section>
-
       <section id="leagueView" class="view" aria-label="スクリムリーグ表">
         <div class="section-heading">
           <h2>スクリムリーグ表</h2>
@@ -103,16 +94,24 @@
         <div id="leagueBoard" class="league-board"></div>
       </section>
 
-      <section id="statsView" class="view" aria-label="個人スタッツ">
+      <section id="statsView" class="view" aria-label="個人成績">
         <div class="section-heading">
-          <h2>個人スタッツ</h2>
+          <h2>個人成績</h2>
+          <p>画像から取得できたKDA、DPM、15分CSを階級別に集計します。</p>
+        </div>
+        <div class="subsection-heading">
+          <h3>個人スタッツ</h3>
         </div>
         <div id="playerStats" class="table-shell"></div>
+        <div class="subsection-heading">
+          <h3>個人ランキング</h3>
+        </div>
+        <div id="rankingBoard" class="ranking-board"></div>
       </section>
 
       <section id="championsView" class="view" aria-label="チャンピオン成績">
         <div class="section-heading">
-          <h2>チャンピオンランキング</h2>
+          <h2>チャンピオン</h2>
           <p>PICK、BAN、勝率、登場数を階級フィルターで確認できます。</p>
         </div>
         <fieldset class="check-filters">
@@ -129,7 +128,15 @@
           <label><input type="checkbox" name="champRole" value="ADC" checked> ADC</label>
           <label><input type="checkbox" name="champRole" value="SUP" checked> SUP</label>
         </fieldset>
+        <div class="subsection-heading">
+          <h3>チャンピオンランキング</h3>
+        </div>
         <div id="championStats" class="table-shell"></div>
+        <div class="subsection-heading">
+          <h3>チャンピオンスタッツ</h3>
+          <button id="championTableToggle" class="subsection-toggle" type="button" aria-expanded="true" aria-controls="championTable">閉じる</button>
+        </div>
+        <div id="championTable" class="table-shell"></div>
       </section>
 
       <section id="aboutView" class="view" aria-label="このサイトについて">
@@ -142,7 +149,7 @@
             <h3>LTK Schedule & Statusについて</h3>
             <p>
               LTK Schedule & Statusは、League The k4senの参加者・視聴者が、試合予定、スクリム結果、参加者プロフィール、LIVE配信中の情報をまとめて確認できるイベントデータサイトです。
-              データベースとして管理しているLTKDBをもとに、カレンダー、リーグ表、個人スタッツ、チャンピオン成績を見やすく整理しています。
+              データベースとして管理しているLTKDBをもとに、カレンダー、リーグ表、個人成績、チャンピオン成績を見やすく整理しています。
             </p>
           </section>
 
@@ -152,7 +159,7 @@
               <ul>
                 <li>スクリム・本番予定をフルカレンダー形式とカード形式で確認できます。</li>
                 <li>イベントカードから対戦カード、参加者、Gameごとの使用チャンピオンとスタッツを確認できます。</li>
-                <li>階級別のリーグ表、個人ランキング、個人スタッツ、チャンピオンランキングを確認できます。</li>
+                <li>階級別のリーグ表、個人成績、チャンピオン成績を確認できます。</li>
                 <li>LTK参加者のうち、League of Legendsを配信中のTwitch配信をLIVE NOWに表示します。</li>
                 <li>スクリムやリスナー戦を除外して、用途に合わせた集計を確認できます。</li>
               </ul>
@@ -236,8 +243,8 @@
           <section class="info-block">
             <h3>連絡先</h3>
             <p>
-              現在、専用フォームは準備中です。データ修正や不具合報告は、LTKDB管理者まで連絡してください。
-              公開用の問い合わせフォームやSNSリンクを設置する場合は、この欄に追記します。
+              現在、Googleフォームでのお問い合わせ窓口を準備中です。フォーム公開後は、この欄からデータ修正依頼、不具合報告、機能要望を送信できます。
+              急ぎの修正がある場合は、LTKDB管理者まで連絡してください。
             </p>
           </section>
 

@@ -36,7 +36,9 @@ const state = {
   excludeViewer: false,
   lastUpdatedAt: null,
   fullCalendar: null,
-  playerStatsSort: { key: "kda", direction: "desc" }
+  playerStatsSort: { key: "kda", direction: "desc" },
+  championStatsSort: { key: "presence", direction: "desc" },
+  championTableOpen: true
 };
 
 const elements = {
@@ -46,6 +48,8 @@ const elements = {
   rankingBoard: document.querySelector("#rankingBoard"),
   playerStats: document.querySelector("#playerStats"),
   championStats: document.querySelector("#championStats"),
+  championTable: document.querySelector("#championTable"),
+  championTableToggle: document.querySelector("#championTableToggle"),
   filterPanel: document.querySelector("#filterPanel"),
   filterToggle: document.querySelector("#filterToggle"),
   headerStatus: document.querySelector("#headerStatus"),
@@ -225,6 +229,10 @@ function bindEvents() {
   document.querySelectorAll("[name='champTier'], [name='champRole']").forEach((input) => {
     input.addEventListener("change", renderChampions);
   });
+  elements.championTableToggle?.addEventListener("click", () => {
+    state.championTableOpen = !state.championTableOpen;
+    applyChampionTableState();
+  });
 
   elements.typeFilter.addEventListener("change", () => {
     state.type = elements.typeFilter.value;
@@ -269,8 +277,7 @@ function render() {
   renderLiveNow();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "league") renderLeagueTables();
-  if (state.view === "players") renderRankings();
-  if (state.view === "stats") renderPlayerStats();
+  if (state.view === "stats") renderPlayerPerformance();
   if (state.view === "champions") renderChampions();
 }
 
@@ -992,6 +999,11 @@ function renderRankings() {
   elements.rankingBoard.replaceChildren(...["NEXT", "CORE", "MASTERS"].map((tier) => rankingTier(tier, stats.filter((item) => item.tier === tier))));
 }
 
+function renderPlayerPerformance() {
+  renderRankings();
+  renderPlayerStats();
+}
+
 function renderPlayerStats() {
   const columns = playerStatsColumns();
   const sortColumn = columns.find((column) => column.key === state.playerStatsSort.key) || columns[5];
@@ -1042,8 +1054,10 @@ function renderPlayerStats() {
 
 function playerStatsColumns() {
   return [
-    { key: "name", label: "Player", value: (item) => item.name, render: (item, index) => playerStatsIdentity(item, index) },
+    { key: "name", label: "Player", value: (item) => item.name, render: (item, index) => playerStatsPlayer(item, index) },
+    { key: "team", label: "Team", value: (item) => teamFullName(item.team), render: (item) => playerStatsTeam(item) },
     { key: "tier", label: "Tier", value: (item) => item.tier, render: (item) => item.tier },
+    { key: "role", label: "Role", value: (item) => item.role, render: (item) => item.role },
     { key: "matches", label: "Games", numeric: true, value: (item) => item.matches, render: (item) => formatInteger(item.matches) },
     { key: "record", label: "W-L", value: (item) => item.wins / item.matches, render: (item) => `${item.wins}-${item.matches - item.wins}` },
     { key: "mvp", label: "MVP", numeric: true, value: (item) => item.mvp, render: (item) => formatInteger(item.mvp) },
@@ -1059,16 +1073,17 @@ function playerStatsColumns() {
   ];
 }
 
-function playerStatsIdentity(item, index) {
+function playerStatsPlayer(item, index) {
   return `
-    <button class="stats-identity stats-identity-button" type="button" data-player-detail="${index}" aria-label="${item.name}の詳細を表示">
+    <button class="stats-player-link" type="button" data-player-detail="${index}" aria-label="${item.name}の詳細を表示">
       ${playerIcon(item.name)}
-      <span class="stats-identity-text">
-        <strong>${item.name}</strong>
-        <small>${teamLogo(item.team, "ranking-team-logo")}${teamShortName(item.team)} / ${item.role}</small>
-      </span>
+      <strong>${item.name}</strong>
     </button>
   `;
+}
+
+function playerStatsTeam(item) {
+  return `<span class="stats-team">${teamLogo(item.team, "ranking-team-logo")}<span>${teamShortName(item.team)}</span></span>`;
 }
 
 function openPlayerDetail(item) {
@@ -1501,6 +1516,112 @@ function renderChampions() {
     championRankingList("ピックorバン率", filtered, "presenceRate", (item) => rateWithCount(item.presence, item.matchCount), "presence"),
     championRankingList("勝率（ピック数3回以上）", filtered.filter((item) => item.picks >= 3), "winRate", (item) => rateWithCount(item.wins, item.picks), "win")
   );
+  renderChampionTable(filtered, tiers, roles);
+}
+
+function renderChampionTable(champions, tiers, roles) {
+  if (!elements.championTable) return;
+  const performance = championPerformanceStats(tiers, roles);
+  const columns = championTableColumns();
+  const sortColumn = columns.find((column) => column.key === state.championStatsSort.key) || columns[4];
+  const rows = sortChampionTableRows(champions.map((item) => ({ ...item, ...(performance.get(item.champion) || {}) })), sortColumn);
+  const table = document.createElement("table");
+  table.className = "champion-stats-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        ${columns.map((column) => `
+          <th class="${column.numeric ? "is-numeric" : ""}">
+            <button class="stat-sort-button" type="button" data-champion-sort="${column.key}" aria-label="${column.label}で並び替え">
+              ${column.label}${championSortMark(column.key)}
+            </button>
+          </th>
+        `).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map((item) => `
+        <tr data-champion-detail="${item.champion}" tabindex="0">
+          ${columns.map((column) => `<td class="${column.numeric ? "is-numeric" : ""}">${column.render(item)}</td>`).join("")}
+        </tr>
+      `).join("")}
+    </tbody>
+  `;
+  table.querySelectorAll("[data-champion-sort]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.championSort;
+      const current = state.championStatsSort;
+      state.championStatsSort = {
+        key,
+        direction: current.key === key && current.direction === "desc" ? "asc" : "desc"
+      };
+      renderChampions();
+    });
+  });
+  table.querySelectorAll("[data-champion-detail]").forEach((row) => {
+    const open = () => {
+      const item = rows.find((champion) => champion.champion === row.dataset.championDetail);
+      if (item) openChampionStatsDetail(item, tiers, roles);
+    };
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
+  elements.championTable.replaceChildren(table);
+  applyChampionTableState();
+}
+
+function championTableColumns() {
+  return [
+    { key: "champion", label: "Champion", value: (item) => item.champion, render: (item) => `<span class="game-champion">${champIcon(item.champion)}<span>${item.champion}</span></span>` },
+    { key: "role", label: "Role", value: (item) => (item.roles || []).join(" / "), render: (item) => (item.roles || []).join(" / ") || "-" },
+    { key: "picks", label: "Pick", numeric: true, value: (item) => item.picks, render: (item) => formatInteger(item.picks) },
+    { key: "bans", label: "Ban", numeric: true, value: (item) => item.bans, render: (item) => formatInteger(item.bans) },
+    { key: "presence", label: "P/B", numeric: true, value: (item) => item.presence, render: (item) => formatInteger(item.presence) },
+    { key: "presenceRate", label: "登場率", numeric: true, value: (item) => item.presenceRate, render: (item) => rateWithCount(item.presence, item.matchCount) },
+    { key: "winRate", label: "勝率", numeric: true, value: (item) => item.picks ? item.winRate : null, render: (item) => item.picks ? rateWithCount(item.wins, item.picks) : "-" },
+    { key: "kda", label: "KDA", numeric: true, value: (item) => item.matches ? item.kda : null, render: (item) => item.matches ? formatDecimal(item.kda) : "-" },
+    { key: "avgKills", label: "K", numeric: true, value: (item) => item.matches ? item.avgKills : null, render: (item) => item.matches ? formatDecimal(item.avgKills) : "-" },
+    { key: "avgDeaths", label: "D", numeric: true, value: (item) => item.matches ? item.avgDeaths : null, render: (item) => item.matches ? formatDecimal(item.avgDeaths) : "-" },
+    { key: "avgAssists", label: "A", numeric: true, value: (item) => item.matches ? item.avgAssists : null, render: (item) => item.matches ? formatDecimal(item.avgAssists) : "-" },
+    { key: "dpm", label: "DPM", numeric: true, value: (item) => item.dpm, render: (item) => item.dpm == null ? "-" : formatDecimal(item.dpm) },
+    { key: "avgCs15", label: "CS@15", numeric: true, value: (item) => item.avgCs15, render: (item) => item.avgCs15 == null ? "-" : formatInteger(item.avgCs15) },
+    { key: "userCount", label: "使用者", numeric: true, value: (item) => item.userCount || 0, render: (item) => formatInteger(item.userCount || 0) }
+  ];
+}
+
+function sortChampionTableRows(rows, column) {
+  const direction = state.championStatsSort.direction === "asc" ? 1 : -1;
+  const collator = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
+  return rows.sort((a, b) => {
+    const left = column.value(a);
+    const right = column.value(b);
+    const leftMissing = left == null || Number.isNaN(left);
+    const rightMissing = right == null || Number.isNaN(right);
+    if (leftMissing || rightMissing) {
+      return leftMissing === rightMissing ? collator.compare(a.champion, b.champion) : leftMissing ? 1 : -1;
+    }
+    const result = Number.isFinite(left) && Number.isFinite(right)
+      ? left - right
+      : collator.compare(String(left ?? ""), String(right ?? ""));
+    return result * direction || b.presence - a.presence || collator.compare(a.champion, b.champion);
+  });
+}
+
+function championSortMark(key) {
+  if (state.championStatsSort.key !== key) return "";
+  return state.championStatsSort.direction === "asc" ? " ▲" : " ▼";
+}
+
+function applyChampionTableState() {
+  if (!elements.championTable || !elements.championTableToggle) return;
+  elements.championTable.hidden = !state.championTableOpen;
+  elements.championTableToggle.textContent = state.championTableOpen ? "閉じる" : "開く";
+  elements.championTableToggle.setAttribute("aria-expanded", String(state.championTableOpen));
 }
 
 function championRankingList(title, rows, key, formatter, detailMode, note = "") {
@@ -1579,6 +1700,177 @@ function championDetailRows(title, rows, winsOnly) {
       `).join("")}
     </div>
   `;
+}
+
+function openChampionStatsDetail(item, tiers, roles) {
+  const rows = competitivePlayerMatches()
+    .filter((row) => row.champion === item.champion)
+    .filter((row) => tiers.includes(row.tier))
+    .filter((row) => roles.includes(row.role))
+    .sort((a, b) => {
+      const left = scrimResults.find((match) => match.id === a.matchId);
+      const right = scrimResults.find((match) => match.id === b.matchId);
+      return String(left?.date || "").localeCompare(String(right?.date || ""))
+        || String(left?.match || "").localeCompare(String(right?.match || ""), "ja", { numeric: true })
+        || String(a.name).localeCompare(String(b.name), "ja");
+    });
+  elements.dialogMeta.textContent = `Champion Stats / ${(item.roles || []).join(" / ") || "ALL"}`;
+  elements.dialogTitle.textContent = item.champion;
+
+  const body = document.createElement("section");
+  body.className = "champion-detail champion-stats-detail";
+  body.innerHTML = `
+    <div class="champion-detail-head">
+      ${champIcon(item.champion)}
+      <div>
+        <strong>${item.champion}</strong>
+        <span>Pick ${formatInteger(item.picks)} / Ban ${formatInteger(item.bans)} / 勝率 ${item.picks ? rateWithCount(item.wins, item.picks) : "-"}</span>
+      </div>
+    </div>
+    <div class="player-detail-metrics champion-detail-metrics">
+      ${playerMetric("Pick", formatInteger(item.picks))}
+      ${playerMetric("Ban", formatInteger(item.bans))}
+      ${playerMetric("P/B", formatInteger(item.presence))}
+      ${playerMetric("登場率", rateWithCount(item.presence, item.matchCount))}
+      ${playerMetric("勝率", item.picks ? rateWithCount(item.wins, item.picks) : "-")}
+      ${playerMetric("KDA", item.matches ? formatDecimal(item.kda) : "-")}
+      ${playerMetric("DPM", item.dpm == null ? "-" : formatDecimal(item.dpm))}
+      ${playerMetric("CS@15", item.avgCs15 == null ? "-" : formatInteger(item.avgCs15))}
+    </div>
+    ${championUserSummary(rows)}
+    ${championOpponentSummary(rows)}
+    ${championMatchLog(rows)}
+  `;
+  elements.dialogBody.replaceChildren(body);
+  elements.dialog.showModal();
+}
+
+function championUserSummary(rows) {
+  if (!rows.length) return `<section class="player-detail-section"><h3>使用者</h3><p class="muted">該当データなし</p></section>`;
+  const users = new Map();
+  rows.forEach((row) => {
+    const key = `${row.team}__${row.name}__${row.role}`;
+    if (!users.has(key)) users.set(key, { name: row.name, team: row.team, role: row.role, matches: 0, wins: 0 });
+    const item = users.get(key);
+    item.matches += 1;
+    item.wins += row.result === "WIN" ? 1 : 0;
+  });
+  return `
+    <section class="player-detail-section">
+      <h3>使用者</h3>
+      <div class="champion-detail-list">
+        ${[...users.values()].sort((a, b) => b.matches - a.matches || b.wins - a.wins).map((user) => `
+          <article>
+            ${playerIcon(user.name)}
+            <div>
+              <strong>${user.name}</strong>
+              <span>${teamLogo(user.team, "ranking-team-logo")}${teamFullName(user.team)} / ${user.role}</span>
+            </div>
+            <b>${user.wins}-${user.matches - user.wins}</b>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function championOpponentSummary(rows) {
+  if (!rows.length) return `<section class="player-detail-section"><h3>対面別成績</h3><p class="muted">該当データなし</p></section>`;
+  const opponents = new Map();
+  rows.forEach((row) => {
+    const opponent = opponentLaneRow(row);
+    const name = opponent?.champion || "不明";
+    if (!opponents.has(name)) opponents.set(name, { champion: name, matches: 0, wins: 0 });
+    const item = opponents.get(name);
+    item.matches += 1;
+    item.wins += row.result === "WIN" ? 1 : 0;
+  });
+  const items = [...opponents.values()].sort((a, b) => b.matches - a.matches || b.wins / b.matches - a.wins / a.matches || a.champion.localeCompare(b.champion, "ja"));
+  return `
+    <section class="player-detail-section">
+      <h3>対面別成績</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table champion-opponent-table">
+          <thead>
+            <tr>
+              <th>Opponent</th>
+              <th>Games</th>
+              <th>W-L</th>
+              <th>Win%</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr>
+                <td><span class="game-champion">${item.champion === "不明" ? "" : champIcon(item.champion)}<span>${item.champion}</span></span></td>
+                <td>${formatInteger(item.matches)}</td>
+                <td>${item.wins}-${item.matches - item.wins}</td>
+                <td>${percent(item.wins / item.matches)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function championMatchLog(rows) {
+  if (!rows.length) return `<section class="player-detail-section"><h3>試合ログ</h3><p class="muted">該当データなし</p></section>`;
+  return `
+    <section class="player-detail-section">
+      <h3>試合ログ</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table champion-log-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Player</th>
+              <th>Team</th>
+              <th>Role</th>
+              <th>Match</th>
+              <th>Result</th>
+              <th>KDA</th>
+              <th>DPM</th>
+              <th>CS@15</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => {
+              const match = scrimResults.find((result) => result.id === row.matchId);
+              const minutes = matchDurationMinutes(row.matchId);
+              return `
+                <tr>
+                  <td>${shortDate(match?.date || row.date)}</td>
+                  <td>${playerMiniLabel(row)}</td>
+                  <td>${playerTeamLabel(row.team)}</td>
+                  <td>${row.role}</td>
+                  <td>${playerMatchLabel(row, match)}</td>
+                  <td>${row.result}</td>
+                  <td>${row.kills}/${row.deaths}/${row.assists}</td>
+                  <td>${minutes ? formatDecimal(row.damage / minutes) : "-"}</td>
+                  <td>${Number.isFinite(row.cs15) && row.cs15 > 0 ? formatInteger(row.cs15) : "-"}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function playerMiniLabel(row) {
+  return `
+    <span class="player-match-label player-mini-label">
+      ${playerIcon(row.name)}
+      <span>${row.name}</span>
+    </span>
+  `;
+}
+
+function playerTeamLabel(teamKey) {
+  return `<span class="player-match-label player-team-label">${teamLogo(teamKey, "ranking-team-logo")}<span>${teamShortName(teamKey)}</span></span>`;
 }
 
 function buildPlayerStats() {
@@ -1673,6 +1965,55 @@ function mergeChampionStats(rows) {
     winRate: item.picks ? item.wins / item.picks : 0
   }))
     .sort((a, b) => (b.picks + b.bans) - (a.picks + a.bans) || b.picks - a.picks);
+}
+
+function championPerformanceStats(tiers, roles) {
+  const map = new Map();
+  competitivePlayerMatches()
+    .filter((row) => tiers.includes(row.tier))
+    .filter((row) => roles.includes(row.role))
+    .filter((row) => !isNoBanChampion(row.champion))
+    .filter((row) => filterByKeyword([row], (item) => `${item.champion} ${item.name} ${teamFullName(item.team)} ${item.role}`)[0])
+    .forEach((row) => {
+      if (!map.has(row.champion)) {
+        map.set(row.champion, {
+          matches: 0,
+          kills: 0,
+          deaths: 0,
+          assists: 0,
+          dpmDamage: 0,
+          dpmMinutes: 0,
+          cs15: 0,
+          cs15Matches: 0,
+          users: new Set()
+        });
+      }
+      const item = map.get(row.champion);
+      item.matches += 1;
+      item.kills += row.kills;
+      item.deaths += row.deaths;
+      item.assists += row.assists;
+      item.users.add(`${row.team}__${row.name}`);
+      const minutes = matchDurationMinutes(row.matchId);
+      if (minutes) {
+        item.dpmDamage += row.damage;
+        item.dpmMinutes += minutes;
+      }
+      if (Number.isFinite(row.cs15) && row.cs15 > 0) {
+        item.cs15 += row.cs15;
+        item.cs15Matches += 1;
+      }
+    });
+  return new Map([...map.entries()].map(([champion, item]) => [champion, {
+    matches: item.matches,
+    kda: item.deaths === 0 ? item.kills + item.assists : (item.kills + item.assists) / item.deaths,
+    avgKills: item.kills / item.matches,
+    avgDeaths: item.deaths / item.matches,
+    avgAssists: item.assists / item.matches,
+    dpm: item.dpmMinutes ? item.dpmDamage / item.dpmMinutes : null,
+    avgCs15: item.cs15Matches ? item.cs15 / item.cs15Matches : null,
+    userCount: item.users.size
+  }]));
 }
 
 function filterCalendarItems() {

@@ -963,6 +963,42 @@ body.filter-collapsed .filter-panel {
   color: var(--muted);
 }
 
+.subsection-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0 10px;
+}
+
+.subsection-heading:first-of-type {
+  margin-top: 4px;
+}
+
+.subsection-heading h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1.05rem;
+}
+
+.subsection-toggle {
+  min-height: 30px;
+  border: 1px solid rgba(20, 184, 166, 0.32);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--text-strong);
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.subsection-toggle:hover,
+.subsection-toggle:focus-visible {
+  border-color: var(--accent);
+  background: rgba(20, 184, 166, 0.16);
+  outline: none;
+}
+
 .ranking-board {
   display: grid;
   gap: 18px;
@@ -1161,32 +1197,70 @@ body.filter-collapsed .filter-panel {
 }
 
 .player-stats-table th,
-.player-stats-table td {
+.player-stats-table td,
+.champion-stats-table th,
+.champion-stats-table td {
   white-space: nowrap;
 }
 
 .player-stats-table {
-  min-width: 1320px;
+  min-width: 1440px;
+}
+
+.champion-stats-table {
+  min-width: 1180px;
+}
+
+.player-stats-table thead th,
+.champion-stats-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-soft);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 
 .player-stats-table th:first-child,
 .player-stats-table td:first-child {
-  width: 210px;
-  min-width: 210px;
+  width: 190px;
+  min-width: 190px;
 }
 
 .player-stats-table th:nth-child(2),
 .player-stats-table td:nth-child(2) {
-  width: 100px;
-  min-width: 100px;
+  width: 90px;
+  min-width: 90px;
+}
+
+.player-stats-table th:nth-child(3),
+.player-stats-table td:nth-child(3),
+.player-stats-table th:nth-child(4),
+.player-stats-table td:nth-child(4) {
+  width: 76px;
+  min-width: 76px;
 }
 
 .player-stats-table th {
   padding: 0;
 }
 
+.champion-stats-table tbody tr {
+  cursor: pointer;
+}
+
+.champion-stats-table tbody tr:hover {
+  background: #1e293b;
+}
+
+.champion-stats-table tbody tr:focus-visible {
+  outline: 2px solid rgba(20, 184, 166, 0.5);
+  outline-offset: -2px;
+}
+
 .player-stats-table th.is-numeric,
-.player-stats-table td.is-numeric {
+.player-stats-table td.is-numeric,
+.champion-stats-table th.is-numeric,
+.champion-stats-table td.is-numeric {
   text-align: right;
 }
 
@@ -1211,23 +1285,18 @@ body.filter-collapsed .filter-panel {
   outline: none;
 }
 
-.stats-player,
 .stats-team {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
 
-.stats-identity {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+.stats-player-link {
+  display: inline-flex;
   align-items: center;
-  column-gap: 10px;
-  min-width: 0;
-}
-
-.stats-identity-button {
+  gap: 9px;
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1237,53 +1306,36 @@ body.filter-collapsed .filter-panel {
   text-align: left;
 }
 
-.stats-identity-button:hover strong,
-.stats-identity-button:focus-visible strong {
+.stats-player-link:hover strong,
+.stats-player-link:focus-visible strong {
   color: var(--accent);
 }
 
-.stats-identity-button:focus-visible {
+.stats-player-link:focus-visible {
   border-radius: 8px;
   outline: 2px solid rgba(20, 184, 166, 0.5);
   outline-offset: 3px;
 }
 
-.stats-identity .ranking-avatar {
-  width: 44px;
-  height: 44px;
+.stats-player-link .ranking-avatar {
+  width: 34px;
+  height: 34px;
   font-size: 0.9rem;
 }
 
-.stats-identity-text {
-  display: grid;
-  min-width: 0;
-  align-content: center;
-  gap: 4px;
-}
-
-.stats-identity-text strong {
+.stats-player-link strong,
+.stats-team span {
   min-width: 0;
   overflow: hidden;
   color: var(--text-strong);
   font-weight: 900;
-  line-height: 1.2;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.stats-identity-text small {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  overflow: hidden;
+.stats-team span {
   color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-}
-
-.stats-player strong {
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .ranking-list {
@@ -1468,6 +1520,7 @@ body.filter-collapsed .filter-panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
+  margin-bottom: 2px;
   overflow: visible;
   border: 0;
   background: transparent;
@@ -1667,27 +1720,39 @@ body.filter-collapsed .filter-panel {
 .player-log-table th:nth-child(4),
 .player-log-table td:nth-child(4),
 .player-log-table th:nth-child(8),
-.player-log-table td:nth-child(8) {
+.player-log-table td:nth-child(8),
+.champion-log-table th:nth-child(2),
+.champion-log-table td:nth-child(2),
+.champion-log-table th:nth-child(3),
+.champion-log-table td:nth-child(3),
+.champion-log-table th:nth-child(4),
+.champion-log-table td:nth-child(4),
+.champion-log-table th:nth-child(5),
+.champion-log-table td:nth-child(5),
+.champion-opponent-table th:first-child,
+.champion-opponent-table td:first-child {
   text-align: left;
 }
 
 .player-match-label {
-  display: inline-grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
-  column-gap: 6px;
-  row-gap: 1px;
+  gap: 6px;
   min-width: 0;
-  max-width: 280px;
+  max-width: 360px;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
-.player-match-label .ranking-team-logo {
-  grid-row: 1 / 3;
+.player-match-label .ranking-team-logo,
+.player-match-label .ranking-avatar {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
 }
 
 .player-match-label.is-listener {
-  grid-template-columns: minmax(0, 1fr);
+  display: inline-flex;
 }
 
 .player-match-label > span {
@@ -1703,6 +1768,16 @@ body.filter-collapsed .filter-panel {
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 900;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.player-team-label {
+  max-width: 90px;
+}
+
+.player-mini-label {
+  max-width: 150px;
 }
 
 .opponent-champion em {
