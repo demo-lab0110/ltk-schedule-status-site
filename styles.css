@@ -1199,7 +1199,9 @@ body.filter-collapsed .filter-panel {
 .player-stats-table th,
 .player-stats-table td,
 .champion-stats-table th,
-.champion-stats-table td {
+.champion-stats-table td,
+.team-stats-table th,
+.team-stats-table td {
   white-space: nowrap;
 }
 
@@ -1211,8 +1213,13 @@ body.filter-collapsed .filter-panel {
   min-width: 1180px;
 }
 
+.team-stats-table {
+  min-width: 1040px;
+}
+
 .player-stats-table thead th,
-.champion-stats-table thead th {
+.champion-stats-table thead th,
+.team-stats-table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
@@ -1248,11 +1255,13 @@ body.filter-collapsed .filter-panel {
   cursor: pointer;
 }
 
-.champion-stats-table tbody tr:hover {
+.champion-stats-table tbody tr:hover,
+.team-stats-table tbody tr:hover {
   background: #1e293b;
 }
 
-.champion-stats-table tbody tr:focus-visible {
+.champion-stats-table tbody tr:focus-visible,
+.team-stats-table tbody tr:focus-visible {
   outline: 2px solid rgba(20, 184, 166, 0.5);
   outline-offset: -2px;
 }
@@ -1260,8 +1269,29 @@ body.filter-collapsed .filter-panel {
 .player-stats-table th.is-numeric,
 .player-stats-table td.is-numeric,
 .champion-stats-table th.is-numeric,
-.champion-stats-table td.is-numeric {
+.champion-stats-table td.is-numeric,
+.team-stats-table th:not(:first-child),
+.team-stats-table td:not(:first-child) {
   text-align: right;
+}
+
+.team-stats-table th:first-child,
+.team-stats-table td:first-child {
+  text-align: left;
+  min-width: 260px;
+}
+
+.team-stats-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 0;
 }
 
 .stat-sort-button {
@@ -1655,6 +1685,150 @@ body.filter-collapsed .filter-panel {
   font-weight: 900;
 }
 
+.team-detail .player-detail-head {
+  grid-template-columns: clamp(64px, 7vw, 96px) minmax(0, 1fr);
+}
+
+.team-profile-head {
+  display: grid;
+  grid-template-columns: clamp(76px, 8vw, 110px) minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--team);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
+  padding: 18px;
+}
+
+.team-profile-head .dialog-team-logo {
+  width: clamp(72px, 8vw, 108px);
+  height: clamp(72px, 8vw, 108px);
+}
+
+.team-profile-head strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: clamp(1.45rem, 2.8vw, 2.4rem);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.team-profile-head span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.team-profile-record {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 10px 12px;
+  text-align: right;
+}
+
+.team-profile-record span,
+.team-stat-card span,
+.team-stat-card small,
+.team-section-title span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.team-profile-record strong {
+  margin-top: 4px;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
+.team-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.team-stat-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card);
+  padding: 12px;
+}
+
+.team-stat-card strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-strong);
+  font-size: 1.22rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-stat-card small {
+  display: block;
+  margin-top: 4px;
+  text-transform: none;
+}
+
+.team-stat-section {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 12px;
+}
+
+.team-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.team-section-title h3 {
+  margin: 0;
+}
+
+.team-draft-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.team-draft-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.team-draft-card h4 {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.team-draft-card div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+}
+
+.team-draft-card div:last-child {
+  border-bottom: 0;
+}
+
+.team-draft-card b {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
 .player-detail-metrics {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1703,9 +1877,134 @@ body.filter-collapsed .filter-panel {
   font-size: 0.86rem;
 }
 
+.champion-log-table,
+.team-log-table {
+  min-width: 1180px;
+}
+
+.team-player-table {
+  min-width: 960px;
+}
+
+.team-player-gol-table {
+  width: 100%;
+  min-width: 1220px;
+  border-collapse: collapse;
+  background: var(--bg-card);
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.team-player-gol-table thead th {
+  border-bottom: 1px solid var(--border-dark);
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.2), rgba(15, 23, 42, 0.98));
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.team-player-gol-table th,
+.team-player-gol-table td,
 .player-detail-table th,
 .player-detail-table td {
   padding: 10px 12px;
+}
+
+.team-player-gol-table th {
+  padding: 11px 14px;
+}
+
+.team-player-gol-table td {
+  border-bottom: 1px solid rgba(38, 50, 68, 0.9);
+  color: #f8fafc;
+  font-size: 0.96rem;
+  font-weight: 900;
+  height: 70px;
+  padding: 14px;
+  vertical-align: middle;
+}
+
+.team-player-gol-table td:not(:first-child):not(:nth-child(2)):not(:last-child) {
+  text-align: center;
+}
+
+.team-player-gol-table tbody tr:nth-child(even) {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.team-player-gol-table tbody tr:hover {
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.team-player-gol-table .player-match-label {
+  max-width: 220px;
+  gap: 9px;
+}
+
+.team-player-gol-table .ranking-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.team-player-gol-table .player-mini-label .ranking-avatar {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.28);
+}
+
+.team-percent-cell {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: 145px;
+}
+
+.team-percent-value {
+  text-align: right;
+}
+
+.team-percent-bar {
+  display: block;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.team-percent-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #38bdf8);
+}
+
+.team-champion-strip {
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 7px 8px;
+  max-width: 560px;
+}
+
+.team-champion-pick {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  color: #f8fafc;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.team-champion-pick .champ-icon,
+.team-champion-pick .champ-fallback {
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.22);
 }
 
 .player-detail-table th:not(:first-child),
@@ -1729,9 +2028,64 @@ body.filter-collapsed .filter-panel {
 .champion-log-table td:nth-child(4),
 .champion-log-table th:nth-child(5),
 .champion-log-table td:nth-child(5),
+.team-opponent-table th:first-child,
+.team-opponent-table td:first-child,
+.team-player-table th:first-child,
+.team-player-table td:first-child,
+.team-log-table th:first-child,
+.team-log-table td:first-child,
+.team-log-table th:nth-child(2),
+.team-log-table td:nth-child(2),
+.team-log-table th:nth-child(6),
+.team-log-table td:nth-child(6),
 .champion-opponent-table th:first-child,
 .champion-opponent-table td:first-child {
   text-align: left;
+}
+
+.team-matchup-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 0;
+  text-align: left;
+}
+
+.team-matchup-link:hover,
+.team-matchup-link:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.team-player-detail-link {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.team-player-detail-link:hover .player-match-label > span,
+.team-player-detail-link:focus-visible .player-match-label > span {
+  color: var(--accent);
+}
+
+.team-player-detail-link:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid rgba(20, 184, 166, 0.45);
+  outline-offset: 3px;
 }
 
 .player-match-label {
@@ -1841,6 +2195,9 @@ th {
 }
 
 .dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -1848,9 +2205,32 @@ th {
   padding: 18px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-card-strong);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.dialog-head > div {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .dialog-head h2 { margin-bottom: 0; }
+
+.dialog-back-button {
+  align-self: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(20, 184, 166, 0.45);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.dialog-back-button:hover,
+.dialog-back-button:focus-visible {
+  background: rgba(20, 184, 166, 0.18);
+}
 
 .icon-button {
   width: 38px;
@@ -2467,6 +2847,19 @@ th {
   .dialog-team {
     min-height: 88px;
     padding: 12px;
+  }
+
+  .team-profile-head {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .team-profile-record {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .team-draft-grid {
+    grid-template-columns: 1fr;
   }
 
   .result-summary {

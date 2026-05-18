@@ -23,6 +23,8 @@ let scrimResults = [];
 let teams = {};
 let liveStreams = [];
 let liveTimer = null;
+let dialogBackStack = [];
+let currentDialogView = null;
 const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
 
 const state = {
@@ -31,6 +33,7 @@ const state = {
   filterOpen: !narrowLayoutQuery.matches,
   type: "",
   tier: "",
+  team: "",
   keyword: "",
   excludeScrims: false,
   excludeViewer: false,
@@ -45,6 +48,7 @@ const elements = {
   calendarGrid: document.querySelector("#calendarGrid"),
   fullCalendar: document.querySelector("#fullCalendar"),
   leagueBoard: document.querySelector("#leagueBoard"),
+  teamStats: document.querySelector("#teamStats"),
   rankingBoard: document.querySelector("#rankingBoard"),
   playerStats: document.querySelector("#playerStats"),
   championStats: document.querySelector("#championStats"),
@@ -58,12 +62,14 @@ const elements = {
   liveNowStatus: document.querySelector("#liveNowStatus"),
   typeFilter: document.querySelector("#typeFilter"),
   tierFilter: document.querySelector("#tierFilter"),
+  teamFilter: document.querySelector("#teamFilter"),
   keywordFilter: document.querySelector("#keywordFilter"),
   excludeScrimsFilter: document.querySelector("#excludeScrimsFilter"),
   excludeViewerFilter: document.querySelector("#excludeViewerFilter"),
   dataSourceStatus: document.querySelector("#dataSourceStatus"),
   reloadData: document.querySelector("#reloadData"),
   dialog: document.querySelector("#matchDialog"),
+  dialogBack: document.querySelector("#backDialog"),
   dialogMeta: document.querySelector("#dialogMeta"),
   dialogTitle: document.querySelector("#dialogTitle"),
   dialogBody: document.querySelector("#dialogBody"),
@@ -180,6 +186,22 @@ function applyData(data) {
   schedules = data.schedules || [];
   scrimResults = data.scrimResults || [];
   teams = data.teams || {};
+  populateTeamFilter();
+}
+
+function populateTeamFilter() {
+  if (!elements.teamFilter) return;
+  const current = elements.teamFilter.value || state.team;
+  const options = Object.entries(teams)
+    .sort(([, a], [, b]) => String(a.shortName || a.name || "").localeCompare(String(b.shortName || b.name || ""), "ja", { numeric: true }))
+    .map(([key, team]) => `<option value="${key}">${team.shortName || key} / ${team.name || key}</option>`);
+  elements.teamFilter.innerHTML = `<option value="">すべて</option>${options.join("")}`;
+  if (current && teams[current]) {
+    elements.teamFilter.value = current;
+    state.team = current;
+  } else {
+    state.team = "";
+  }
 }
 
 async function hydrateLiveStreams(options = {}) {
@@ -242,6 +264,10 @@ function bindEvents() {
     state.tier = elements.tierFilter.value;
     render();
   });
+  elements.teamFilter?.addEventListener("change", () => {
+    state.team = elements.teamFilter.value;
+    render();
+  });
   elements.keywordFilter.addEventListener("input", () => {
     state.keyword = elements.keywordFilter.value.trim().toLocaleLowerCase("ja");
     render();
@@ -263,8 +289,14 @@ function bindEvents() {
     await hydrateLiveStreams({ refresh: true });
   });
   elements.closeDialog.addEventListener("click", () => elements.dialog.close());
+  elements.dialogBack?.addEventListener("click", restorePreviousDialogView);
   elements.dialog.addEventListener("click", (event) => {
     if (event.target === elements.dialog) elements.dialog.close();
+  });
+  elements.dialog.addEventListener("close", () => {
+    dialogBackStack = [];
+    currentDialogView = null;
+    updateDialogBackButton();
   });
   narrowLayoutQuery.addEventListener("change", (event) => {
     state.filterOpen = !event.matches;
@@ -277,6 +309,7 @@ function render() {
   renderLiveNow();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "league") renderLeagueTables();
+  if (state.view === "teams") renderTeamStats();
   if (state.view === "stats") renderPlayerPerformance();
   if (state.view === "champions") renderChampions();
 }
@@ -740,7 +773,8 @@ function resultLine(item) {
   return `<div class="side-line"><span>RESULT ${record.leftWins}-${record.rightWins}</span><span>${record.games}G / ${record.dateLabel}</span></div>`;
 }
 
-function openMatch(item) {
+function openMatch(item, options = {}) {
+  prepareDialogNavigation({ type: "match", item }, options);
   elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} ${item.eventTime ? `${item.eventTime} ` : ""}${item.day} ${item.match} / ${item.type}`;
   elements.dialogTitle.textContent = isViewerScrim(item)
     ? `${viewerHomeLabel(item)} vs ${VIEWER_OPPONENT_LABEL}`
@@ -749,7 +783,36 @@ function openMatch(item) {
     ? [matchSummary(item), resultSummary(item), participantSection(item)]
     : [matchSummary(item), participantSection(item)];
   elements.dialogBody.replaceChildren(...body);
-  elements.dialog.showModal();
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
+}
+
+function prepareDialogNavigation(nextView, options = {}) {
+  if (options.clear !== false) dialogBackStack = [];
+  if (options.push && currentDialogView) dialogBackStack.push(currentDialogView);
+  currentDialogView = nextView;
+  updateDialogBackButton();
+}
+
+function restorePreviousDialogView() {
+  const previous = dialogBackStack.pop();
+  if (!previous) return;
+  if (previous.type === "team") openTeamDetail(previous.item, { clear: false });
+  if (previous.type === "match") openMatch(previous.item, { clear: false });
+  if (previous.type === "player") openPlayerDetail(previous.item, { clear: false });
+  updateDialogBackButton();
+}
+
+function updateDialogBackButton() {
+  if (!elements.dialogBack) return;
+  elements.dialogBack.hidden = dialogBackStack.length === 0;
+}
+
+function resetDialogScroll() {
+  requestAnimationFrame(() => {
+    elements.dialog.scrollTop = 0;
+    elements.dialogBody.scrollTop = 0;
+  });
 }
 
 function matchSummary(item) {
@@ -787,8 +850,8 @@ function resultSummary(item) {
     section.append(list);
     const detail = document.createElement("div");
     detail.className = "game-detail";
-    detail.innerHTML = `<p class="muted">Gameを選択すると使用チャンピオンとスタッツを表示します。</p>`;
     section.append(detail);
+    renderGameDetail(section, item.results[0]);
     return section;
   }
   section.innerHTML = `
@@ -995,8 +1058,32 @@ function participantCard(person) {
 }
 
 function renderRankings() {
-  const stats = buildPlayerStats().filter((item) => filterByKeyword([item], (x) => `${x.name} ${x.champions} ${x.team}`)[0]);
+  const teamGameCounts = rankingTeamGameCounts();
+  const stats = buildPlayerStats()
+    .filter((item) => !state.team || item.team === state.team)
+    .filter((item) => isRankingEligible(item, teamGameCounts))
+    .filter((item) => filterByKeyword([item], (x) => `${x.name} ${x.champions} ${x.team}`)[0]);
   elements.rankingBoard.replaceChildren(...["NEXT", "CORE", "MASTERS"].map((tier) => rankingTier(tier, stats.filter((item) => item.tier === tier))));
+}
+
+function rankingTeamGameCounts() {
+  const counts = new Map();
+  leagueScrimResults()
+    .filter((row) => matchPassesGlobalFilters(row.id))
+    .forEach((row) => {
+      [row.left, row.right]
+        .filter((teamKey) => teamKey && teamKey !== VIEWER_TEAM_KEY)
+        .forEach((teamKey) => {
+          const key = `${teamKey}__${row.tier}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+    });
+  return counts;
+}
+
+function isRankingEligible(item, teamGameCounts) {
+  const teamGames = teamGameCounts.get(`${item.team}__${item.tier}`) || 0;
+  return teamGames > 0 && item.matches >= teamGames / 2;
 }
 
 function renderPlayerPerformance() {
@@ -1009,6 +1096,7 @@ function renderPlayerStats() {
   const sortColumn = columns.find((column) => column.key === state.playerStatsSort.key) || columns[5];
   const rows = sortPlayerStats(buildPlayerStats()
     .filter((item) => !state.tier || item.tier === state.tier)
+    .filter((item) => !state.team || item.team === state.team)
     .filter((item) => filterByKeyword([item], (x) => `${x.name} ${teamFullName(x.team)} ${x.tier} ${x.role} ${x.champions}`)[0]), sortColumn);
   const table = document.createElement("table");
   table.className = "player-stats-table";
@@ -1086,7 +1174,8 @@ function playerStatsTeam(item) {
   return `<span class="stats-team">${teamLogo(item.team, "ranking-team-logo")}<span>${teamShortName(item.team)}</span></span>`;
 }
 
-function openPlayerDetail(item) {
+function openPlayerDetail(item, options = {}) {
+  prepareDialogNavigation({ type: "player", item }, options);
   const rows = competitivePlayerMatches()
     .filter((row) => row.name === item.name && row.team === item.team && row.role === item.role)
     .sort((a, b) => {
@@ -1121,7 +1210,8 @@ function openPlayerDetail(item) {
     ${playerMatchLog(rows)}
   `;
   elements.dialogBody.replaceChildren(body);
-  elements.dialog.showModal();
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
 }
 
 function playerMetric(label, value) {
@@ -1311,8 +1401,11 @@ function leagueTier(tier) {
   section.className = "league-tier";
   section.innerHTML = `<h3>${tier}</h3>`;
 
-  const teamKeys = Object.keys(teams);
+  const teamKeys = state.team && teams[state.team] ? [state.team] : Object.keys(teams);
   const columnKeys = [...teamKeys, VIEWER_TEAM_KEY];
+  if (state.team && teams[state.team]) {
+    columnKeys.splice(0, columnKeys.length, ...Object.keys(teams), VIEWER_TEAM_KEY);
+  }
   const summary = buildLeagueSummary(rows, teamKeys, columnKeys);
   const table = document.createElement("table");
   table.className = "league-table";
@@ -1402,7 +1495,7 @@ function leagueCell(rowTeam, colTeam, summary) {
   `;
 }
 
-function openLeagueResults(resultIdsValue) {
+function openLeagueResults(resultIdsValue, options = {}) {
   const ids = String(resultIdsValue || "").split(",").map((id) => id.trim()).filter(Boolean);
   const results = ids.map((id) => scrimResults.find((result) => result.id === id)).filter(Boolean);
   if (!results.length) return;
@@ -1428,7 +1521,7 @@ function openLeagueResults(resultIdsValue) {
     viewerMatch: results.some((result) => result.viewerMatch),
     resultRecord: summarizeResults(results, first.left, first.right)
   };
-  openMatch(item);
+  openMatch(item, options);
 }
 
 function gameRangeLabel(results) {
@@ -1443,6 +1536,541 @@ function gameRangeLabel(results) {
 function totalCell(teamKey, summary) {
   const record = summary.totals.get(teamKey) || { wins: 0, losses: 0 };
   return `<strong>${record.wins}-${record.losses}</strong>`;
+}
+
+function renderTeamStats() {
+  if (!elements.teamStats) return;
+  const rows = buildTeamStatsRows();
+  if (!rows.length) {
+    elements.teamStats.innerHTML = `<p class="muted empty-state">条件に一致するチーム戦績がありません。</p>`;
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "team-stats-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Tier</th>
+        <th>Games</th>
+        <th>W-L</th>
+        <th>Win%</th>
+        <th>KDA</th>
+        <th>DPM</th>
+        <th>Avg Gold</th>
+        <th>MVP</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map((row, index) => `
+        <tr data-team-detail="${index}" tabindex="0">
+          <td><button class="team-stats-link" type="button">${teamLogo(row.team, "ranking-team-logo")}<strong>${teamFullName(row.team)}</strong></button></td>
+          <td>${row.tier}</td>
+          <td>${formatInteger(row.matches)}</td>
+          <td>${row.wins}-${row.losses}</td>
+          <td>${percent(row.wins / row.matches)}</td>
+          <td>${formatTeamKda(row)}</td>
+          <td>${row.dpm == null ? "-" : formatDecimal(row.dpm)}</td>
+          <td>${row.avgGold == null ? "-" : formatInteger(row.avgGold)}</td>
+          <td>${formatInteger(row.mvp)}</td>
+        </tr>
+      `).join("")}
+    </tbody>
+  `;
+  table.querySelectorAll("[data-team-detail]").forEach((row) => {
+    const item = rows[Number(row.dataset.teamDetail)];
+    row.addEventListener("click", () => openTeamDetail(item));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openTeamDetail(item);
+      }
+    });
+  });
+  elements.teamStats.replaceChildren(table);
+}
+
+function buildTeamStatsRows() {
+  const map = new Map();
+  filteredTeamResults().forEach((result) => {
+    [result.left, result.right].forEach((teamKey) => {
+      if (!teams[teamKey]) return;
+      const side = teamKey === result.left ? "left" : "right";
+      const key = `${teamKey}__${result.tier}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          team: teamKey,
+          tier: result.tier,
+          matches: 0,
+          wins: 0,
+          losses: 0,
+          kills: 0,
+          deaths: 0,
+          assists: 0,
+          gold: 0,
+          goldMatches: 0,
+          dpmDamage: 0,
+          dpmMinutes: 0,
+          mvp: 0,
+          resultIds: []
+        });
+      }
+      const item = map.get(key);
+      const kda = parseTeamKda(side === "left" ? result.leftKda : result.rightKda);
+      const gold = side === "left" ? result.leftGold : result.rightGold;
+      item.matches += 1;
+      item.wins += result.winner === teamKey ? 1 : 0;
+      item.losses += result.winner && result.winner !== teamKey ? 1 : 0;
+      item.kills += kda.kills;
+      item.deaths += kda.deaths;
+      item.assists += kda.assists;
+      if (Number.isFinite(gold) && gold > 0) {
+        item.gold += gold;
+        item.goldMatches += 1;
+      }
+      item.mvp += resultMvpTeam(result) === teamKey ? 1 : 0;
+      item.resultIds.push(result.id);
+      const minutes = matchDurationMinutes(result.id);
+      if (minutes) {
+        teamRowsForMatch(result.id, teamKey).forEach((row) => {
+          item.dpmDamage += row.damage;
+          item.dpmMinutes += minutes;
+        });
+      }
+    });
+  });
+  return [...map.values()]
+    .map((item) => ({
+      ...item,
+      avgGold: item.goldMatches ? item.gold / item.goldMatches : null,
+      dpm: item.dpmMinutes ? item.dpmDamage / item.dpmMinutes : null
+    }))
+    .filter((item) => !state.team || item.team === state.team)
+    .sort((a, b) => tierSort(a.tier) - tierSort(b.tier) || teamShortName(a.team).localeCompare(teamShortName(b.team), "ja"));
+}
+
+function filteredTeamResults() {
+  return leagueScrimResults()
+    .filter((row) => matchPassesGlobalFilters(row.id))
+    .filter((row) => !state.tier || row.tier === state.tier)
+    .filter((row) => !state.team || row.left === state.team || row.right === state.team || row.winner === state.team)
+    .filter((row) => {
+      if (!state.type) return true;
+      if (state.type === "スクリム") return isScrimLikeItem(row);
+      if (state.type === "本番") return String(row.matchType || row.type || "").includes("本番");
+      return String(row.type || "").includes(state.type);
+    })
+    .filter((row) => {
+      if (!state.keyword) return true;
+      const text = [teamFullName(row.left), teamFullName(row.right), row.tier, row.matchName, row.type, row.mvp, row.carry]
+        .join(" ")
+        .toLocaleLowerCase("ja");
+      return text.includes(state.keyword);
+    });
+}
+
+function openTeamDetail(item, options = {}) {
+  prepareDialogNavigation({ type: "team", item }, options);
+  const results = item.resultIds
+    .map((id) => scrimResults.find((row) => row.id === id))
+    .filter(Boolean)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.match || "").localeCompare(String(b.match || ""), "ja", { numeric: true }));
+  elements.dialogMeta.textContent = `Team / ${item.tier}`;
+  elements.dialogTitle.textContent = `${teamFullName(item.team)} ${item.tier}`;
+
+  const body = document.createElement("section");
+  body.className = "player-detail team-detail";
+  body.innerHTML = `
+    ${teamProfileHeader(item, results)}
+    ${teamOverviewCards(item, results)}
+    ${teamDraftPanel(item.team, results)}
+    ${teamMetricPanels(item.team, results)}
+    ${teamOpponentTable(item.team, results)}
+    ${teamPlayerSummary(item.team, results)}
+    ${teamMatchLog(item.team, results)}
+  `;
+  elements.dialogBody.replaceChildren(body);
+  body.querySelectorAll("[data-team-matchup-result-ids]").forEach((button) => {
+    button.addEventListener("click", () => openLeagueResults(button.dataset.teamMatchupResultIds, { push: true, clear: false }));
+  });
+  body.querySelectorAll("[data-team-log-result-id]").forEach((button) => {
+    button.addEventListener("click", () => openLeagueResults(button.dataset.teamLogResultId, { push: true, clear: false }));
+  });
+  body.querySelectorAll("[data-team-player-name]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const item = buildPlayerStats().find((row) => row.name === button.dataset.teamPlayerName && row.team === button.dataset.teamPlayerTeam && row.role === button.dataset.teamPlayerRole);
+      if (item) openPlayerDetail(item, { push: true, clear: false });
+    });
+  });
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
+}
+
+function teamProfileHeader(item, results) {
+  return `
+    <div class="team-profile-head" style="--team:${teams[item.team]?.accent || "#64748b"}">
+      ${teamLogo(item.team, "dialog-team-logo")}
+      <div>
+        <p class="eyebrow">${item.tier} / ${teamShortName(item.team)}</p>
+        <strong>${teamFullName(item.team)}</strong>
+        <span>${formatInteger(item.matches)} Games ・ ${item.wins}-${item.losses} ・ Win ${percent(item.wins / item.matches)}</span>
+      </div>
+      <div class="team-profile-record">
+        <span>Latest</span>
+        <strong>${teamRecentForm(item.team, results)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function teamRecentForm(teamKey, results) {
+  const marks = results.slice(-6).map((result) => result.winner === teamKey ? "W" : "L");
+  return marks.length ? marks.join(" ") : "-";
+}
+
+function teamOverviewCards(item, results) {
+  const avgTime = averageMatchMinutes(results);
+  return `
+    <section class="team-overview-grid">
+      ${teamStatCard("Record", `${item.wins}-${item.losses}`, `${percent(item.wins / item.matches)} Win`)}
+      ${teamStatCard("KDA", formatTeamKda(item), "Team total")}
+      ${teamStatCard("DPM", item.dpm == null ? "-" : formatDecimal(item.dpm), "Team damage/min")}
+      ${teamStatCard("Avg Gold", item.avgGold == null ? "-" : formatInteger(item.avgGold), "Result screen")}
+      ${teamStatCard("Avg Time", avgTime == null ? "-" : `${formatDecimal(avgTime)}m`, "Known games")}
+      ${teamStatCard("MVP", formatInteger(item.mvp), "MVP count")}
+    </section>
+  `;
+}
+
+function teamStatCard(label, value, sub) {
+  return `<article class="team-stat-card"><span>${label}</span><strong>${value}</strong><small>${sub}</small></article>`;
+}
+
+function averageMatchMinutes(results) {
+  const minutes = results.map((result) => matchDurationMinutes(result.id)).filter((value) => Number.isFinite(value) && value > 0);
+  if (!minutes.length) return null;
+  return minutes.reduce((sum, value) => sum + value, 0) / minutes.length;
+}
+
+function teamDraftPanel(teamKey, results) {
+  const resultIds = new Set(results.map((result) => result.id));
+  const picks = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey && row.champion && !isNoBanChampion(row.champion));
+  const bans = bpRows.filter((row) => resultIds.has(row.matchId) && row.team === teamKey && row.type === "BAN" && row.champion && !isNoBanChampion(row.champion));
+  const bannedAgainst = bpRows.filter((row) => resultIds.has(row.matchId) && row.team !== teamKey && row.type === "BAN" && row.champion && !isNoBanChampion(row.champion));
+  return `
+    <section class="team-stat-section">
+      <div class="team-section-title">
+        <h3>Draft</h3>
+        <span>画像から取得できたPICK/BAN</span>
+      </div>
+      <div class="team-draft-grid">
+        ${teamChampionMiniList("Most Picked", countChampions(picks), "pick")}
+        ${teamChampionMiniList("Most Banned", countChampions(bans), "ban")}
+        ${teamChampionMiniList("Banned Against", countChampions(bannedAgainst), "ban")}
+      </div>
+    </section>
+  `;
+}
+
+function teamMetricPanels(teamKey, results) {
+  const resultIds = new Set(results.map((result) => result.id));
+  const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey);
+  const csValues = rows.map((row) => row.cs15).filter((value) => Number.isFinite(value) && value > 0);
+  const maxDpm = rows
+    .map((row) => {
+      const minutes = matchDurationMinutes(row.matchId);
+      return minutes ? { row, dpm: row.damage / minutes } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.dpm - a.dpm)[0];
+  const maxDamage = rows.slice().sort((a, b) => b.damage - a.damage)[0];
+  return `
+    <section class="team-stat-section">
+      <div class="team-section-title">
+        <h3>Economy / Aggression</h3>
+        <span>リザルト画像ベース</span>
+      </div>
+      <div class="team-overview-grid">
+        ${teamStatCard("Avg CS@15", csValues.length ? formatInteger(csValues.reduce((sum, value) => sum + value, 0) / csValues.length) : "-", "Player average")}
+        ${teamStatCard("Top DPM", maxDpm ? `${maxDpm.row.name} ${formatDecimal(maxDpm.dpm)}` : "-", "Best game")}
+        ${teamStatCard("Top Damage", maxDamage ? `${maxDamage.name} ${formatInteger(maxDamage.damage)}` : "-", "Best game")}
+      </div>
+    </section>
+  `;
+}
+
+function countChampions(rows) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = row.champion;
+    if (!key) return;
+    if (!map.has(key)) map.set(key, { champion: key, count: 0, wins: 0 });
+    const item = map.get(key);
+    item.count += 1;
+    item.wins += row.result === "WIN" ? 1 : 0;
+  });
+  return [...map.values()].sort((a, b) => b.count - a.count || b.wins - a.wins || a.champion.localeCompare(b.champion, "ja"));
+}
+
+function teamChampionMiniList(title, rows, mode) {
+  const items = rows.slice(0, 5);
+  return `
+    <article class="team-draft-card">
+      <h4>${title}</h4>
+      ${items.length ? items.map((item) => `
+        <div>
+          <span class="game-champion">${champIcon(item.champion)}<span>${item.champion}</span></span>
+          <b>${formatInteger(item.count)}${mode === "pick" ? ` / ${percent(item.wins / item.count)}` : ""}</b>
+        </div>
+      `).join("") : `<p class="muted">データなし</p>`}
+    </article>
+  `;
+}
+
+function teamOpponentTable(teamKey, results) {
+  const map = new Map();
+  results.forEach((result) => {
+    const opponent = result.left === teamKey ? result.right : result.right === teamKey ? result.left : "";
+    if (!opponent) return;
+    if (!map.has(opponent)) map.set(opponent, { team: opponent, matches: 0, wins: 0, resultIds: [] });
+    const item = map.get(opponent);
+    item.matches += 1;
+    item.wins += result.winner === teamKey ? 1 : 0;
+    item.resultIds.push(result.id);
+  });
+  const rows = [...map.values()].sort((a, b) => b.matches - a.matches || b.wins - a.wins);
+  if (!rows.length) return `<section class="player-detail-section"><h3>対戦相手別成績</h3><p class="muted">該当データなし</p></section>`;
+  return `
+    <section class="player-detail-section">
+      <h3>対戦相手別成績</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table team-opponent-table">
+          <thead>
+            <tr>
+              <th>Opponent</th>
+              <th>Games</th>
+              <th>W-L</th>
+              <th>Win%</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>
+                  <button class="team-matchup-link" type="button" data-team-matchup-result-ids="${row.resultIds.join(",")}">
+                    ${row.team === VIEWER_TEAM_KEY ? VIEWER_OPPONENT_LABEL : `${teamLogo(row.team, "ranking-team-logo")} <span>${teamFullName(row.team)}</span>`}
+                  </button>
+                </td>
+                <td>${formatInteger(row.matches)}</td>
+                <td>${row.wins}-${row.matches - row.wins}</td>
+                <td>${percent(row.wins / row.matches)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function teamPlayerSummary(teamKey, results) {
+  const resultIds = new Set(results.map((result) => result.id));
+  const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey);
+  if (!rows.length) return `<section class="player-detail-section"><h3>主な選手成績</h3><p class="muted">該当データなし</p></section>`;
+  const stats = buildPlayerStatsFromRows(rows);
+  return `
+    <section class="player-detail-section">
+      <h3>主な選手成績</h3>
+      <div class="player-detail-table-wrap">
+        <table class="team-player-gol-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Player</th>
+              <th>KDA</th>
+              <th>KP%</th>
+              <th>DPM</th>
+              <th>DMG%</th>
+              <th>GOLD%</th>
+              <th>Champions Played</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stats.map((row) => `
+              <tr>
+                <td>${row.role}</td>
+                <td>
+                  <button class="team-player-detail-link" type="button" data-team-player-name="${escapeAttr(row.name)}" data-team-player-team="${escapeAttr(row.team)}" data-team-player-role="${escapeAttr(row.role)}" aria-label="${escapeAttr(row.name)}の個人成績を表示">
+                    ${playerMiniLabel(row)}
+                  </button>
+                </td>
+                <td>${formatDecimal(row.kda)}</td>
+                <td>${percent(row.killParticipation)}</td>
+                <td>${row.dpm == null ? "-" : formatDecimal(row.dpm)}</td>
+                <td>${teamPercentBar(row.damageShare)}</td>
+                <td>${teamPercentBar(row.goldShare)}</td>
+                <td>${teamPlayerChampionStrip(row.championCounts)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function buildPlayerStatsFromRows(rows) {
+  const map = new Map();
+  const teamKillsByMatch = new Map();
+  const teamDamageByMatch = new Map();
+  const teamGoldByMatch = new Map();
+  rows.forEach((row) => {
+    const key = row.matchId;
+    teamKillsByMatch.set(key, (teamKillsByMatch.get(key) || 0) + row.kills);
+    teamDamageByMatch.set(key, (teamDamageByMatch.get(key) || 0) + row.damage);
+    teamGoldByMatch.set(key, (teamGoldByMatch.get(key) || 0) + row.gold);
+  });
+  rows.forEach((row) => {
+    const key = `${row.team}__${row.name}__${row.role}`;
+    if (!map.has(key)) map.set(key, { name: row.name, team: row.team, role: row.role, matches: 0, wins: 0, kills: 0, deaths: 0, assists: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0, kpTotal: 0, kpMatches: 0, damageShareTotal: 0, damageShareMatches: 0, goldShareTotal: 0, goldShareMatches: 0, championCounts: new Map() });
+    const item = map.get(key);
+    item.matches += 1;
+    item.wins += row.result === "WIN" ? 1 : 0;
+    item.kills += row.kills;
+    item.deaths += row.deaths;
+    item.assists += row.assists;
+    const minutes = matchDurationMinutes(row.matchId);
+    if (minutes) {
+      item.dpmDamage += row.damage;
+      item.dpmMinutes += minutes;
+    }
+    if (Number.isFinite(row.cs15) && row.cs15 > 0) {
+      item.cs15 += row.cs15;
+      item.cs15Matches += 1;
+    }
+    const teamKills = teamKillsByMatch.get(row.matchId) || 0;
+    if (teamKills > 0) {
+      item.kpTotal += (row.kills + row.assists) / teamKills;
+      item.kpMatches += 1;
+    }
+    const teamDamage = teamDamageByMatch.get(row.matchId) || 0;
+    if (teamDamage > 0) {
+      item.damageShareTotal += row.damage / teamDamage;
+      item.damageShareMatches += 1;
+    }
+    const teamGold = teamGoldByMatch.get(row.matchId) || 0;
+    if (teamGold > 0) {
+      item.goldShareTotal += row.gold / teamGold;
+      item.goldShareMatches += 1;
+    }
+    if (row.champion && !isNoBanChampion(row.champion)) {
+      item.championCounts.set(row.champion, (item.championCounts.get(row.champion) || 0) + 1);
+    }
+  });
+  return [...map.values()]
+    .map((item) => ({
+      ...item,
+      kda: item.deaths === 0 ? item.kills + item.assists : (item.kills + item.assists) / item.deaths,
+      dpm: item.dpmMinutes ? item.dpmDamage / item.dpmMinutes : null,
+      avgCs15: item.cs15Matches ? item.cs15 / item.cs15Matches : null,
+      killParticipation: item.kpMatches ? item.kpTotal / item.kpMatches : 0,
+      damageShare: item.damageShareMatches ? item.damageShareTotal / item.damageShareMatches : 0,
+      goldShare: item.goldShareMatches ? item.goldShareTotal / item.goldShareMatches : 0,
+      championCounts: [...item.championCounts.entries()]
+        .map(([champion, count]) => ({ champion, count }))
+        .sort((a, b) => b.count - a.count || a.champion.localeCompare(b.champion, "ja"))
+    }))
+    .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || b.matches - a.matches || a.name.localeCompare(b.name, "ja"));
+}
+
+function teamPercentBar(value) {
+  return `
+    <span class="team-percent-cell">
+      <span class="team-percent-value">${percent(value)}</span>
+      <span class="team-percent-bar"><i style="width:${Math.max(0, Math.min(100, Math.round(value * 100)))}%"></i></span>
+    </span>
+  `;
+}
+
+function teamPlayerChampionStrip(champions) {
+  if (!champions?.length) return "-";
+  return `
+    <span class="team-champion-strip">
+      ${champions.map((item) => `
+        <span class="team-champion-pick" title="${item.champion} ${item.count}回">
+          ${champIcon(item.champion)}
+          <small>${formatInteger(item.count)}</small>
+        </span>
+      `).join("")}
+    </span>
+  `;
+}
+
+function teamMatchLog(teamKey, results) {
+  if (!results.length) return `<section class="player-detail-section"><h3>試合ログ</h3><p class="muted">該当データなし</p></section>`;
+  return `
+    <section class="player-detail-section">
+      <h3>試合ログ</h3>
+      <div class="player-detail-table-wrap">
+        <table class="player-detail-table team-log-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Match</th>
+              <th>Result</th>
+              <th>KDA</th>
+              <th>Gold</th>
+              <th>Max DMG</th>
+              <th>MVP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${results.map((result) => {
+              const side = result.left === teamKey ? "left" : "right";
+              const opponent = side === "left" ? result.right : result.left;
+              const win = result.winner === teamKey;
+              return `
+                <tr>
+                  <td>${shortDate(result.date)}</td>
+                  <td>
+                    <button class="team-matchup-link" type="button" data-team-log-result-id="${escapeAttr(result.id)}" aria-label="${escapeAttr(result.match || result.id)}の試合詳細を表示">
+                      ${opponent === VIEWER_TEAM_KEY ? VIEWER_OPPONENT_LABEL : `${teamLogo(opponent, "ranking-team-logo")} ${teamFullName(opponent)}`}
+                      <small>${result.match || result.id}</small>
+                    </button>
+                  </td>
+                  <td>${win ? "WIN" : "LOSE"}</td>
+                  <td>${side === "left" ? result.leftKda : result.rightKda}</td>
+                  <td>${formatInteger(side === "left" ? result.leftGold : result.rightGold)}</td>
+                  <td>${result.carry ? `${result.carry} ${formatInteger(result.maxDamage)}` : "-"}</td>
+                  <td>${result.mvp || "-"}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function parseTeamKda(value) {
+  const [kills = 0, deaths = 0, assists = 0] = String(value || "")
+    .split("/")
+    .map((part) => Number(String(part).replace(/[^\d.-]/g, "")) || 0);
+  return { kills, deaths, assists };
+}
+
+function formatTeamKda(item) {
+  return `${formatInteger(item.kills)}/${formatInteger(item.deaths)}/${formatInteger(item.assists)}`;
+}
+
+function teamRowsForMatch(matchId, teamKey) {
+  return playerMatches.filter((row) => row.matchId === matchId && row.team === teamKey);
+}
+
+function resultMvpTeam(result) {
+  if (!result?.mvp) return "";
+  return playerMatches.find((row) => row.matchId === result.id && row.name === result.mvp)?.team || "";
 }
 
 function rankingTier(tier, rows) {
@@ -1463,6 +2091,8 @@ function rankingTier(tier, rows) {
     rankingList("15分時点のCS", rows.filter((item) => item.avgCs15 != null), "avgCs15", formatInteger, "desc", "CS@15"),
     rankingList("分間ダメージ", rows.filter((item) => item.dpm != null), "dpm", formatDecimal, "desc", "DPM"),
     rankingList("ダメージ割合", rows, "damageShare", percent, "desc", "DMG%"),
+    rankingList("1試合最大ダメージ", rows, "maxDamageGame", formatInteger, "desc", "Max DMG"),
+    rankingList("1試合最多キル", rows, "maxKillsGame", formatInteger, "desc", "Max K"),
     rankingList("使用チャンピオン数", rows, "championCount", formatInteger, "desc", "Champ")
   );
   return section;
@@ -1673,7 +2303,8 @@ function openChampionDetail(item, title, mode) {
     ${mode === "ban" || mode === "presence" ? `<p class="muted">BANは現在の元データにBANしたチーム・選手情報がないため、件数のみ表示しています。BAN数: ${item.bans}</p>` : ""}
   `;
   elements.dialogBody.replaceChildren(body);
-  elements.dialog.showModal();
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
 }
 
 function championDetailMetric(item, mode) {
@@ -1742,7 +2373,8 @@ function openChampionStatsDetail(item, tiers, roles) {
     ${championMatchLog(rows)}
   `;
   elements.dialogBody.replaceChildren(body);
-  elements.dialog.showModal();
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
 }
 
 function championUserSummary(rows) {
@@ -1879,7 +2511,7 @@ function buildPlayerStats() {
   competitivePlayerMatches().forEach((row) => {
     const key = row.name;
     if (!map.has(key)) {
-      map.set(key, { name: row.name, team: row.team, tier: row.tier, role: row.role, matches: 0, wins: 0, mvp: 0, kills: 0, deaths: 0, assists: 0, damage: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0, gold: 0, champions: new Set() });
+      map.set(key, { name: row.name, team: row.team, tier: row.tier, role: row.role, matches: 0, wins: 0, mvp: 0, kills: 0, deaths: 0, assists: 0, damage: 0, dpmDamage: 0, dpmMinutes: 0, cs15: 0, cs15Matches: 0, gold: 0, maxDamageGame: 0, maxKillsGame: 0, champions: new Set() });
     }
     const item = map.get(key);
     item.matches += 1;
@@ -1898,6 +2530,8 @@ function buildPlayerStats() {
       item.cs15 += row.cs15;
       item.cs15Matches += 1;
     }
+    item.maxDamageGame = Math.max(item.maxDamageGame, row.damage || 0);
+    item.maxKillsGame = Math.max(item.maxKillsGame, row.kills || 0);
     item.gold += row.gold;
     item.champions.add(row.champion);
   });
@@ -2020,6 +2654,7 @@ function filterCalendarItems() {
   return allCalendarItems().filter((item) => {
     if (state.type && item.type !== state.type) return false;
     if (state.tier && !item.tier.includes(state.tier)) return false;
+    if (state.team && !itemIncludesTeam(item, state.team)) return false;
     if (state.excludeScrims && isScrimLikeItem(item)) return false;
     if (state.excludeViewer && isViewerScrim(item)) return false;
     if (!state.keyword) return true;
@@ -2029,6 +2664,16 @@ function filterCalendarItems() {
       .toLocaleLowerCase("ja");
     return text.includes(state.keyword);
   });
+}
+
+function itemIncludesTeam(item, teamKey) {
+  if (!teamKey) return true;
+  return item?.left === teamKey
+    || item?.right === teamKey
+    || item?.winner === teamKey
+    || item?.loser === teamKey
+    || item?.leftLabel === teamKey
+    || item?.rightLabel === teamKey;
 }
 
 function isScrimCalendarItem(item) {
@@ -2064,7 +2709,7 @@ function leagueScrimResults() {
 }
 
 function competitivePlayerMatches() {
-  return playerMatches.filter((row) => row.name && row.team !== VIEWER_TEAM_KEY && matchPassesGlobalFilters(row.matchId));
+  return playerMatches.filter((row) => row.name && row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
 }
 
 function matchDurationMinutes(matchId) {
@@ -2094,7 +2739,7 @@ function parseMatchDurationMinutes(value) {
 }
 
 function competitiveBpRows() {
-  return bpRows.filter((row) => row.team !== VIEWER_TEAM_KEY && matchPassesGlobalFilters(row.matchId));
+  return bpRows.filter((row) => row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
 }
 
 function matchPassesGlobalFilters(matchId) {
@@ -2322,6 +2967,14 @@ function shortDate(dateValue) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function escapeAttr(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function iconLink(label, url, icon) {
   if (!url) return `<span class="sns-link is-off"><img src="${icon}" alt="${label}"></span>`;
   const normalized = url.startsWith("http") ? url : `https://${url}`;
@@ -2365,6 +3018,11 @@ function formatNumber(value) {
 
 function formatInteger(value) {
   return new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(Math.trunc(Number(value) || 0));
+}
+
+function formatSignedInteger(value) {
+  const number = Math.trunc(Number(value) || 0);
+  return `${number > 0 ? "+" : ""}${new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 }).format(number)}`;
 }
 
 function formatDecimal(value) {

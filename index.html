@@ -35,6 +35,7 @@
         <nav class="view-tabs main-tabs" aria-label="メインナビゲーション">
           <button class="tab-button is-active" data-view="calendar">予定</button>
           <button class="tab-button" data-view="league">リーグ表</button>
+          <button class="tab-button" data-view="teams">チーム戦績</button>
           <button class="tab-button" data-view="stats">個人成績</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
         </nav>
@@ -72,6 +73,12 @@
             <option value="NEXT">NEXT</option>
           </select>
         </label>
+        <label>
+          <span>チーム</span>
+          <select id="teamFilter">
+            <option value="">すべて</option>
+          </select>
+        </label>
         <label class="search-box">
           <span>検索</span>
           <input id="keywordFilter" type="search" placeholder="チーム名、選手名、チャンピオン">
@@ -92,6 +99,14 @@
           <h2>スクリムリーグ表</h2>
         </div>
         <div id="leagueBoard" class="league-board"></div>
+      </section>
+
+      <section id="teamsView" class="view" aria-label="チーム戦績">
+        <div class="section-heading">
+          <h2>チーム戦績</h2>
+          <p>チームと階級を別チームとして、勝敗、対戦相手別成績、試合ログを確認できます。</p>
+        </div>
+        <div id="teamStats" class="table-shell"></div>
       </section>
 
       <section id="statsView" class="view" aria-label="個人成績">
@@ -270,6 +285,7 @@
 
     <dialog id="matchDialog" class="match-dialog">
       <div class="dialog-head">
+        <button id="backDialog" class="dialog-back-button" type="button" hidden>← 戻る</button>
         <div>
           <p id="dialogMeta" class="eyebrow"></p>
           <h2 id="dialogTitle"></h2>
