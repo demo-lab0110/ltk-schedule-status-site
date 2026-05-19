@@ -25,7 +25,7 @@ jobs:
       - name: Fetch latest site data
         run: |
           node <<'NODE'
-          const fs = require("fs");
+          const fs = await import("node:fs");
 
           const GAS_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
           const url = `${GAS_URL}?api=site&callback=__cb`;
