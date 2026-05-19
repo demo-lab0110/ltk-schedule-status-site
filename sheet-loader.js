@@ -1,4 +1,3 @@
-const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
@@ -123,36 +122,6 @@ function writeCache(key, value) {
   } catch {
     // Ignore storage failures; the live page can still render from the current response.
   }
-}
-
-function fetchJsonp(url) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `__ltkdbSiteData_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement("script");
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("site-api: timeout"));
-    }, 15000);
-
-    function cleanup() {
-      window.clearTimeout(timeout);
-      delete window[callbackName];
-      script.remove();
-    }
-
-    window[callbackName] = (payload) => {
-      cleanup();
-      resolve(payload);
-    };
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("site-api: script load failed"));
-    };
-
-    url.searchParams.set("callback", callbackName);
-    script.src = url.toString();
-    document.head.append(script);
-  });
 }
 
 function buildTeams(rows) {

@@ -27,7 +27,7 @@ jobs:
           node <<'NODE'
           const fs = await import("node:fs");
 
-          const GAS_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
+          const GAS_URL = "https://script.google.com/macros/s/AKfycbwNzByFJex1ZVj7mKFrMnGfYDrRSK_6Ew1j5A-S6hQymMs8a7Emx1_wqWGPObNCe_0/exec";
 
           async function fetchJsonp(api) {
             const url = `${GAS_URL}?api=${api}&callback=__cb`;

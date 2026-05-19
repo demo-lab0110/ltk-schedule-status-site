@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-02";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-03";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
