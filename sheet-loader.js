@@ -1,5 +1,6 @@
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
-const STATIC_SITE_DATA_URL = "./site-data.json?v=20260519-01";
+const STATIC_SITE_DATA_URL = "./site-data.json";
+const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
 const SITE_DATA_CACHE_KEY = "ltkdb.siteData.v1";
 const LIVE_CACHE_KEY = "ltkdb.liveData.v1";
 const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -84,7 +85,9 @@ export function twitchLoginFromUrl(value) {
 
 async function fetchSiteSheets(options = {}) {
   try {
-    const response = await fetch(STATIC_SITE_DATA_URL, { cache: options.refresh ? "reload" : "default" });
+    const url = new URL(STATIC_SITE_DATA_URL, window.location.href);
+    url.searchParams.set("_", String(Math.floor(Date.now() / SITE_DATA_REFRESH_MS)));
+    const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) throw new Error(`site-data: ${response.status}`);
     const payload = await response.json();
     if (!payload.ok || !payload.sheets) throw new Error("site-data: invalid payload");

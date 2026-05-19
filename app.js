@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260519-02";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-01";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -23,6 +23,7 @@ let scrimResults = [];
 let teams = {};
 let liveStreams = [];
 let liveTimer = null;
+let dataTimer = null;
 let dialogBackStack = [];
 let currentDialogView = null;
 const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
@@ -84,6 +85,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   await hydrateData();
   await hydrateLiveStreams();
+  startDataRefresh();
   startLiveRefresh();
   applyCalendarMode();
   render();
@@ -164,7 +166,7 @@ function ensureExtraFilters(toolbar) {
 
 async function hydrateData(options = {}) {
   try {
-    if (elements.dataSourceStatus) elements.dataSourceStatus.textContent = options.refresh ? "データベースを再読込中" : "データ確認中";
+    if (elements.dataSourceStatus && !options.silent) elements.dataSourceStatus.textContent = options.refresh ? "データベースを更新確認中" : "データ確認中";
     if (elements.reloadData) elements.reloadData.disabled = true;
     applyData(await loadSiteData(options));
     markUpdated();
@@ -232,6 +234,11 @@ async function hydrateLiveStreams(options = {}) {
 function startLiveRefresh() {
   if (liveTimer) window.clearInterval(liveTimer);
   liveTimer = window.setInterval(() => hydrateLiveStreams(), 10 * 60 * 1000);
+}
+
+function startDataRefresh() {
+  if (dataTimer) window.clearInterval(dataTimer);
+  dataTimer = window.setInterval(() => hydrateData({ refresh: true, silent: true }), 5 * 60 * 1000);
 }
 
 function bindEvents() {
@@ -3155,6 +3162,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 

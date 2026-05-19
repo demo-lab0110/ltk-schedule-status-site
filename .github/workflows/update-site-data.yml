@@ -1,0 +1,67 @@
+name: Update site data
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-site-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Fetch latest site data
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+
+          const GAS_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
+          const url = `${GAS_URL}?api=site&callback=__cb`;
+          const response = await fetch(url, {
+            headers: { "User-Agent": "ltk-schedule-status-site-data-updater" }
+          });
+          if (!response.ok) {
+            throw new Error(`GAS request failed: ${response.status}`);
+          }
+
+          const text = (await response.text()).replace(/^\uFEFF/, "");
+          const match = text.match(/^__cb\(([\s\S]*)\);?\s*$/);
+          if (!match) {
+            throw new Error("Invalid JSONP response from GAS");
+          }
+
+          const payload = JSON.parse(match[1]);
+          if (!payload.ok || !payload.sheets) {
+            throw new Error(payload.error || "Invalid site data payload");
+          }
+
+          fs.writeFileSync("site-data.json", JSON.stringify({
+            ok: true,
+            updatedAt: payload.updatedAt || new Date().toISOString(),
+            sheets: payload.sheets
+          }));
+          NODE
+
+      - name: Commit updated data
+        run: |
+          if git diff --quiet -- site-data.json; then
+            echo "No site-data.json changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site-data.json
+          git commit -m "Update site data"
+          git push
