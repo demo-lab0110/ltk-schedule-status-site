@@ -1,4 +1,8 @@
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
+const STATIC_SITE_DATA_URL = "./site-data.json?v=20260519-01";
+const SITE_DATA_CACHE_KEY = "ltkdb.siteData.v1";
+const LIVE_CACHE_KEY = "ltkdb.liveData.v1";
+const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const TEAM_LOGOS = {
   DD: "./image/dd_emblem.png",
@@ -39,14 +43,18 @@ export async function loadSiteData(options = {}) {
 }
 
 export async function loadLiveStreams(options = {}) {
+  if (!options.refresh) {
+    const cached = readCache(LIVE_CACHE_KEY, LIVE_CACHE_TTL_MS);
+    if (cached) return cached;
+  }
+
   const url = new URL(GAS_WEB_APP_URL);
   url.searchParams.set("api", "live");
-  url.searchParams.set("_", Date.now().toString());
   if (options.refresh) url.searchParams.set("refresh", "1");
 
   const payload = await fetchJsonp(url);
   if (!payload.ok) throw new Error(payload.error || "live-api: invalid payload");
-  return {
+  const liveData = {
     streams: (payload.streams || []).map((item) => ({
       name: clean(item.name),
       iconUrl: clean(item.iconUrl),
@@ -62,6 +70,8 @@ export async function loadLiveStreams(options = {}) {
     updatedAt: clean(payload.updatedAt),
     configured: Boolean(payload.configured)
   };
+  writeCache(LIVE_CACHE_KEY, liveData);
+  return liveData;
 }
 
 export function twitchLoginFromUrl(value) {
@@ -73,14 +83,38 @@ export function twitchLoginFromUrl(value) {
 }
 
 async function fetchSiteSheets(options = {}) {
-  const url = new URL(GAS_WEB_APP_URL);
-  url.searchParams.set("api", "site");
-  url.searchParams.set("_", Date.now().toString());
-  if (options.refresh) url.searchParams.set("refresh", "1");
+  try {
+    const response = await fetch(STATIC_SITE_DATA_URL, { cache: options.refresh ? "reload" : "default" });
+    if (!response.ok) throw new Error(`site-data: ${response.status}`);
+    const payload = await response.json();
+    if (!payload.ok || !payload.sheets) throw new Error("site-data: invalid payload");
+    writeCache(SITE_DATA_CACHE_KEY, payload);
+    return payload.sheets;
+  } catch (error) {
+    const cached = readCache(SITE_DATA_CACHE_KEY);
+    if (cached?.sheets) return cached.sheets;
+    throw error;
+  }
+}
 
-  const payload = await fetchJsonp(url);
-  if (!payload.ok || !payload.sheets) throw new Error("site-api: invalid payload");
-  return payload.sheets;
+function readCache(key, maxAgeMs = 0) {
+  try {
+    const raw = window.localStorage?.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (maxAgeMs && Date.now() - Number(cached.savedAt || 0) > maxAgeMs) return null;
+    return cached.value || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(key, value) {
+  try {
+    window.localStorage?.setItem(key, JSON.stringify({ savedAt: Date.now(), value }));
+  } catch {
+    // Ignore storage failures; the live page can still render from the current response.
+  }
 }
 
 function fetchJsonp(url) {

@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260512-02";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260519-02";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -168,14 +168,14 @@ async function hydrateData(options = {}) {
     if (elements.reloadData) elements.reloadData.disabled = true;
     applyData(await loadSiteData(options));
     markUpdated();
-    document.body.dataset.dataSource = "sheet";
-    if (elements.dataSourceStatus) elements.dataSourceStatus.textContent = "データベースの最新データを表示中";
+    document.body.dataset.dataSource = "static";
+    if (elements.dataSourceStatus) elements.dataSourceStatus.textContent = "データベースの公開データを表示中";
     render();
   } catch (error) {
-    console.error("Google Sheets load failed.", error);
+    console.error("Site data load failed.", error);
     document.body.dataset.dataSource = "error";
     if (elements.dataSourceStatus) {
-      elements.dataSourceStatus.textContent = "データベース読み込み失敗: GASのWebアプリ公開状態を確認してください";
+      elements.dataSourceStatus.textContent = "データベース読み込み失敗: 時間をおいて再読み込みしてください";
     }
   } finally {
     if (elements.reloadData) elements.reloadData.disabled = false;
@@ -231,7 +231,7 @@ async function hydrateLiveStreams(options = {}) {
 
 function startLiveRefresh() {
   if (liveTimer) window.clearInterval(liveTimer);
-  liveTimer = window.setInterval(() => hydrateLiveStreams({ refresh: true }), 4 * 60 * 1000);
+  liveTimer = window.setInterval(() => hydrateLiveStreams(), 10 * 60 * 1000);
 }
 
 function bindEvents() {
@@ -3155,6 +3155,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
