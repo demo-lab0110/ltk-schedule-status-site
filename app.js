@@ -36,7 +36,7 @@ const state = {
   tier: "",
   team: "",
   keyword: "",
-  excludeScrims: false,
+  excludeScrims: true,
   excludeViewer: false,
   lastUpdatedAt: null,
   fullCalendar: null,
@@ -151,7 +151,7 @@ function ensureExtraFilters(toolbar) {
   fieldset.innerHTML = `
     <legend>表示オプション</legend>
     <label>
-      <input id="excludeScrimsFilter" type="checkbox">
+      <input id="excludeScrimsFilter" type="checkbox" checked>
       <span>スクリムを除く</span>
     </label>
     <label>
