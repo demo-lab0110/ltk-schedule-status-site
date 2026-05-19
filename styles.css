@@ -165,7 +165,7 @@ main {
 
 .app-layout {
   display: grid;
-  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(210px, 260px);
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -326,11 +326,20 @@ body.filter-collapsed .filter-panel {
 }
 
 .nav-stack {
+  position: relative;
   display: grid;
   justify-items: end;
   gap: 10px;
   margin-top: 0;
   min-width: 0;
+}
+
+.nav-stack .filter-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  width: min(280px, calc(100vw - 32px));
 }
 
 .nav-filter-toggle {
@@ -510,6 +519,32 @@ body.filter-collapsed .filter-panel {
 .contact-page .info-block:last-child {
   border-color: rgba(20, 184, 166, 0.34);
   background: rgba(20, 184, 166, 0.08);
+}
+
+.contact-actions {
+  margin-top: 14px;
+}
+
+.contact-form-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid rgba(20, 184, 166, 0.65);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.18);
+  color: var(--text-strong);
+  font-weight: 800;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.contact-form-link:hover,
+.contact-form-link:focus-visible {
+  border-color: var(--accent);
+  background: rgba(20, 184, 166, 0.28);
+  transform: translateY(-1px);
 }
 
 .full-calendar-shell {
@@ -1547,14 +1582,116 @@ body.filter-collapsed .filter-panel {
 }
 
 #championStats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
+  display: block;
   margin-bottom: 2px;
   overflow: visible;
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.champion-pb-panel {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.champion-pb-head {
+  border-bottom: 1px solid rgba(20, 184, 166, 0.5);
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.32), rgba(20, 184, 166, 0.18));
+  padding: 8px 12px;
+}
+
+.champion-pb-head h4 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.champion-pb-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.champion-pb-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.champion-pb-label {
+  display: grid;
+  gap: 2px;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1.35;
+  padding-top: 4px;
+}
+
+.champion-pb-label span {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.champion-pb-icons {
+  display: flex;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  min-width: 0;
+}
+
+.champion-pb-icon {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 31px;
+  min-height: 47px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0;
+}
+
+.champion-pb-icon .champ-icon,
+.champion-pb-icon .champ-fallback {
+  width: 31px;
+  height: 31px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.24);
+}
+
+.champion-pb-icon:hover .champ-icon,
+.champion-pb-icon:focus-visible .champ-icon,
+.champion-pb-icon:hover .champ-fallback,
+.champion-pb-icon:focus-visible .champ-fallback {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 16px rgba(20, 184, 166, 0.25);
+}
+
+.champion-pb-icon:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(20, 184, 166, 0.45);
+  outline-offset: 2px;
+}
+
+.champion-pb-total {
+  margin: -2px 0 8px 106px;
+  color: var(--text-strong);
+  font-size: 0.86rem;
+  font-weight: 900;
 }
 
 .champion-ranking-list {
@@ -1569,6 +1706,21 @@ body.filter-collapsed .filter-panel {
 
 .champion-ranking-row:hover {
   background: #1e293b;
+}
+
+.ranking-row[role="button"] {
+  cursor: pointer;
+}
+
+.ranking-row[role="button"]:hover,
+.ranking-row[role="button"]:focus-visible {
+  background: #1e293b;
+  outline: none;
+}
+
+.ranking-row[role="button"]:hover .ranking-person-card strong,
+.ranking-row[role="button"]:focus-visible .ranking-person-card strong {
+  color: var(--accent);
 }
 
 .champion-detail {
@@ -2673,7 +2825,7 @@ th {
 
   .nav-stack {
     width: 100%;
-    justify-items: start;
+    justify-items: end;
   }
 
   .main-tabs {
@@ -2685,7 +2837,7 @@ th {
   }
 
   .app-layout {
-    grid-template-columns: minmax(210px, 250px) minmax(0, 1fr) minmax(190px, 230px);
+    grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
     gap: 16px;
   }
 
@@ -2720,10 +2872,6 @@ th {
 
   body.filter-open .filter-panel {
     display: block;
-  }
-
-  body.filter-collapsed .filter-panel {
-    display: none;
   }
 
   .live-now-panel {

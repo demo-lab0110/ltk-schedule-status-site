@@ -30,7 +30,7 @@ const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
 const state = {
   view: "calendar",
   calendarMode: window.matchMedia("(max-width: 760px)").matches ? "cards" : "full",
-  filterOpen: !narrowLayoutQuery.matches,
+  filterOpen: false,
   type: "",
   tier: "",
   team: "",
@@ -132,6 +132,10 @@ function setupHeaderEnhancements() {
 
 function moveFilterPanel() {
   const toolbar = document.querySelector(".toolbar");
+  const navStack = document.querySelector(".nav-stack");
+  if (elements.filterPanel && navStack && elements.filterPanel.parentElement !== navStack) {
+    navStack.append(elements.filterPanel);
+  }
   if (toolbar && elements.filterPanel && toolbar.parentElement !== elements.filterPanel) {
     elements.filterPanel.append(toolbar);
   }
@@ -298,10 +302,7 @@ function bindEvents() {
     currentDialogView = null;
     updateDialogBackButton();
   });
-  narrowLayoutQuery.addEventListener("change", (event) => {
-    state.filterOpen = !event.matches;
-    applyFilterPanelState();
-  });
+  narrowLayoutQuery.addEventListener("change", applyFilterPanelState);
 }
 
 function render() {
@@ -310,7 +311,8 @@ function render() {
   if (state.view === "calendar") renderCalendar();
   if (state.view === "league") renderLeagueTables();
   if (state.view === "teams") renderTeamStats();
-  if (state.view === "stats") renderPlayerPerformance();
+  if (state.view === "stats") renderPlayerStats();
+  if (state.view === "ranking") renderRankings();
   if (state.view === "champions") renderChampions();
 }
 
@@ -2124,6 +2126,15 @@ function rankingList(title, rows, key, formatter, direction = "desc", columnLabe
         </span>
         <b>${formatter(item[key])}</b>
       `;
+      row.tabIndex = 0;
+      row.role = "button";
+      row.addEventListener("click", () => openPlayerDetail(item));
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openPlayerDetail(item);
+        }
+      });
       block.append(row);
     });
   return block;
@@ -2140,12 +2151,7 @@ function renderChampions() {
     : [...rolePickRows, ...tierRows.filter((item) => item.type === "BAN" && roleChampions.has(item.champion))];
   const merged = mergeChampionStats(rows);
   const filtered = filterByKeyword(merged, (item) => `${item.champion} ${item.roles.join(" ")}`);
-  elements.championStats.replaceChildren(
-    championRankingList("ピック率", filtered, "pickRate", (item) => rateWithCount(item.picks, item.matchCount), "pick"),
-    championRankingList("バン率", filtered, "banRate", (item) => rateWithCount(item.bans, item.matchCount), "ban"),
-    championRankingList("ピックorバン率", filtered, "presenceRate", (item) => rateWithCount(item.presence, item.matchCount), "presence"),
-    championRankingList("勝率（ピック数3回以上）", filtered.filter((item) => item.picks >= 3), "winRate", (item) => rateWithCount(item.wins, item.picks), "win")
-  );
+  elements.championStats.replaceChildren(championPicksBansPanel(filtered, rows, roles));
   renderChampionTable(filtered, tiers, roles);
 }
 
@@ -2284,6 +2290,97 @@ function championRankingList(title, rows, key, formatter, detailMode, note = "")
   return block;
 }
 
+function championPicksBansPanel(champions, rows, selectedRoles) {
+  const panel = document.createElement("section");
+  panel.className = "champion-pb-panel";
+  const championByName = new Map(champions.map((item) => [item.champion, item]));
+  const roleRows = selectedRoles.length ? selectedRoles : ROLE_ORDER;
+  panel.innerHTML = `
+    <header class="champion-pb-head">
+      <h4>PICKS & BANS</h4>
+    </header>
+    <div class="champion-pb-body">
+      ${championIconRow({
+        label: "All champions",
+        sublabel: "Champion list",
+        items: champions
+          .slice()
+          .sort((a, b) => b.presence - a.presence || b.picks - a.picks || b.bans - a.bans || a.champion.localeCompare(b.champion, "ja"))
+          .map((item) => ({ champion: item.champion, count: null, detailMode: "presence" })),
+        championByName
+      })}
+      <div class="champion-pb-total">Total : ${formatInteger(champions.length)}</div>
+      ${championIconRow({
+        label: "Bans",
+        sublabel: "Bans stats",
+        items: champions
+          .filter((item) => item.bans > 0)
+          .sort((a, b) => b.bans - a.bans || b.presence - a.presence || a.champion.localeCompare(b.champion, "ja"))
+          .map((item) => ({ champion: item.champion, count: item.bans, detailMode: "ban" })),
+        championByName
+      })}
+      ${roleRows.map((role) => championIconRow({
+        label: championRoleDisplay(role),
+        sublabel: "",
+        items: championRolePickItems(rows, role, championByName),
+        championByName
+      })).join("")}
+    </div>
+  `;
+  panel.querySelectorAll("[data-champion-pb]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const item = championByName.get(button.dataset.championPb);
+      if (item) openChampionDetail(item, button.dataset.championTitle || "PICKS & BANS", button.dataset.championMode || "presence");
+    });
+  });
+  return panel;
+}
+
+function championIconRow({ label, sublabel, items, championByName }) {
+  return `
+    <div class="champion-pb-row">
+      <div class="champion-pb-label">
+        <strong>${label}</strong>
+        ${sublabel ? `<span>${sublabel}</span>` : ""}
+      </div>
+      <div class="champion-pb-icons">
+        ${items.length ? items.map((item) => {
+          const champion = championByName.get(item.champion);
+          const title = champion
+            ? `${item.champion}\nPicks: ${champion.picks}\nBans: ${champion.bans}\nWinrate: ${champion.picks ? percent(champion.wins / champion.picks) : "-"}`
+            : item.champion;
+          return `
+            <button class="champion-pb-icon" type="button" data-champion-pb="${escapeAttr(item.champion)}" data-champion-mode="${escapeAttr(item.detailMode || "pick")}" data-champion-title="${escapeAttr(label)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(item.champion)}の詳細を表示">
+              ${champIcon(item.champion)}
+              ${item.count == null ? "" : `<small>${formatInteger(item.count)}</small>`}
+            </button>
+          `;
+        }).join("") : `<span class="muted">該当データなし</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function championRolePickItems(rows, role, championByName) {
+  const counts = new Map();
+  rows
+    .filter((row) => row.type === "PICK" && row.role === role && championByName.has(row.champion))
+    .forEach((row) => counts.set(row.champion, (counts.get(row.champion) || 0) + 1));
+  return [...counts.entries()]
+    .map(([champion, count]) => ({ champion, count, detailMode: "pick" }))
+    .sort((a, b) => b.count - a.count || a.champion.localeCompare(b.champion, "ja"));
+}
+
+function championRoleDisplay(role) {
+  return {
+    TOP: "TOP",
+    JG: "JUNGLE",
+    MID: "MID",
+    ADC: "BOT",
+    SUP: "SUPPORT"
+  }[role] || role;
+}
+
 function openChampionDetail(item, title, mode) {
   elements.dialogMeta.textContent = `Champion / ${title}`;
   elements.dialogTitle.textContent = item.champion;
@@ -2298,6 +2395,12 @@ function openChampionDetail(item, title, mode) {
         <strong>${title}</strong>
         <span>${championDetailMetric(item, mode)}</span>
       </div>
+    </div>
+    <div class="player-detail-metrics champion-detail-metrics">
+      ${playerMetric("Pick率", rateWithCount(item.picks, item.matchCount))}
+      ${playerMetric("BAN率", rateWithCount(item.bans, item.matchCount))}
+      ${playerMetric("P/B率", rateWithCount(item.presence, item.matchCount))}
+      ${playerMetric("勝率", item.picks ? rateWithCount(item.wins, item.picks) : "-")}
     </div>
     ${championDetailRows("勝利した使用者", wins, true)}
     ${mode === "ban" || mode === "presence" ? `<p class="muted">BANは現在の元データにBANしたチーム・選手情報がないため、件数のみ表示しています。BAN数: ${item.bans}</p>` : ""}

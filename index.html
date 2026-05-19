@@ -37,6 +37,7 @@
           <button class="tab-button" data-view="league">リーグ表</button>
           <button class="tab-button" data-view="teams">チーム戦績</button>
           <button class="tab-button" data-view="stats">個人成績</button>
+          <button class="tab-button" data-view="ranking">個人ランキング</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
         </nav>
         <button id="filterToggle" class="filter-toggle-button nav-filter-toggle" type="button">隠す</button>
@@ -114,10 +115,14 @@
           <h2>個人成績</h2>
           <p>画像から取得できたKDA、DPM、15分CSを階級別に集計します。</p>
         </div>
-        <div class="subsection-heading">
-          <h3>個人スタッツ</h3>
-        </div>
         <div id="playerStats" class="table-shell"></div>
+      </section>
+
+      <section id="rankingView" class="view" aria-label="個人ランキング">
+        <div class="section-heading">
+          <h2>個人ランキング</h2>
+          <p>出場試合数が所属チーム・階級の試合数の半分以上の選手を対象に集計します。</p>
+        </div>
         <div class="subsection-heading">
           <h3>個人ランキング</h3>
         </div>
@@ -134,14 +139,6 @@
           <label><input type="checkbox" name="champTier" value="NEXT" checked> NEXT</label>
           <label><input type="checkbox" name="champTier" value="CORE" checked> CORE</label>
           <label><input type="checkbox" name="champTier" value="MASTERS" checked> MASTERS</label>
-        </fieldset>
-        <fieldset class="check-filters">
-          <legend>ロール</legend>
-          <label><input type="checkbox" name="champRole" value="TOP" checked> TOP</label>
-          <label><input type="checkbox" name="champRole" value="JG" checked> JG</label>
-          <label><input type="checkbox" name="champRole" value="MID" checked> MID</label>
-          <label><input type="checkbox" name="champRole" value="ADC" checked> ADC</label>
-          <label><input type="checkbox" name="champRole" value="SUP" checked> SUP</label>
         </fieldset>
         <div class="subsection-heading">
           <h3>チャンピオンランキング</h3>
@@ -201,13 +198,11 @@
           </section>
 
           <section class="info-block">
-            <h3>今後追加したい機能</h3>
-            <ul>
-              <li>サイト全体の検索性改善</li>
-              <li>選手・チーム・チャンピオン詳細ページの拡充</li>
-              <li>スクリム画像取り込み後の確認フロー改善</li>
-              <li>Firebaseなど、よりリアルタイムに反映しやすいDB構成への移行検討</li>
-            </ul>
+            <h3>情報の共有について</h3>
+            <p>
+              本サイトに掲載している試合予定、戦績、スタッツなどの情報は、SNSや配信内などで自由に紹介・引用していただいて問題ありません。
+              共有する際は、できれば本サイトのURLもあわせて載せてもらえると嬉しいです。
+            </p>
           </section>
 
           <section class="info-block">
@@ -215,6 +210,14 @@
             <p>
               本サイトは、参加者プロフィールやLIVE NOW表示のために、X、YouTube、Twitchなど外部サービスへのリンクや配信情報を参照します。
               外部サイトで提供される情報や利用条件は、それぞれのサービスの規約を確認してください。
+            </p>
+          </section>
+
+          <section class="info-block">
+            <h3>非公式・非商用について</h3>
+            <p>
+              本サイトは個人が作成・運営している非公式のファンサイトであり、League The k4sen、Riot Games、各参加者・所属組織の公式サイトではありません。
+              また、本サイトは現時点で商用利用を目的としておらず、掲載しているロゴ、画像、配信サービス等の権利は各権利者に帰属します。
             </p>
           </section>
 
@@ -258,9 +261,14 @@
           <section class="info-block">
             <h3>連絡先</h3>
             <p>
-              現在、Googleフォームでのお問い合わせ窓口を準備中です。フォーム公開後は、この欄からデータ修正依頼、不具合報告、機能要望を送信できます。
-              急ぎの修正がある場合は、LTKDB管理者まで連絡してください。
+              データ修正依頼、不具合報告、機能要望はGoogleフォームから送信できます。
+              試合IDや該当ページ、スクリーンショットURLなどが分かる場合は、あわせて記載してください。
             </p>
+            <div class="contact-actions">
+              <a class="contact-form-link" href="https://docs.google.com/forms/d/e/1FAIpQLSex-p2GkBVZ3LBkafhTmx77asdZFCn0KqeOn7HS7jD041VpuA/viewform" target="_blank" rel="noreferrer">
+                Googleフォームを開く
+              </a>
+            </div>
           </section>
 
           <section class="info-block">
