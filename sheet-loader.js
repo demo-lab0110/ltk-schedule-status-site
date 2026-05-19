@@ -1,9 +1,9 @@
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
 const STATIC_SITE_DATA_URL = "./site-data.json";
+const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
 const SITE_DATA_CACHE_KEY = "ltkdb.siteData.v1";
 const LIVE_CACHE_KEY = "ltkdb.liveData.v1";
-const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const TEAM_LOGOS = {
   DD: "./image/dd_emblem.png",
@@ -44,35 +44,21 @@ export async function loadSiteData(options = {}) {
 }
 
 export async function loadLiveStreams(options = {}) {
-  if (!options.refresh) {
-    const cached = readCache(LIVE_CACHE_KEY, LIVE_CACHE_TTL_MS);
+  try {
+    const url = new URL(STATIC_LIVE_DATA_URL, window.location.href);
+    url.searchParams.set("_", String(Math.floor(Date.now() / SITE_DATA_REFRESH_MS)));
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) throw new Error(`live-data: ${response.status}`);
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "live-data: invalid payload");
+    const liveData = normalizeLivePayload(payload);
+    writeCache(LIVE_CACHE_KEY, liveData);
+    return liveData;
+  } catch (error) {
+    const cached = readCache(LIVE_CACHE_KEY);
     if (cached) return cached;
+    throw error;
   }
-
-  const url = new URL(GAS_WEB_APP_URL);
-  url.searchParams.set("api", "live");
-  if (options.refresh) url.searchParams.set("refresh", "1");
-
-  const payload = await fetchJsonp(url);
-  if (!payload.ok) throw new Error(payload.error || "live-api: invalid payload");
-  const liveData = {
-    streams: (payload.streams || []).map((item) => ({
-      name: clean(item.name),
-      iconUrl: clean(item.iconUrl),
-      teamName: clean(item.teamName),
-      teamShortName: clean(item.teamShortName),
-      teamKey: clean(item.teamKey),
-      rank: tierValue(item.rank),
-      role: clean(item.role).toUpperCase(),
-      streamTitle: clean(item.streamTitle),
-      streamUrl: clean(item.streamUrl),
-      platform: clean(item.platform) || "twitch"
-    })),
-    updatedAt: clean(payload.updatedAt),
-    configured: Boolean(payload.configured)
-  };
-  writeCache(LIVE_CACHE_KEY, liveData);
-  return liveData;
 }
 
 export function twitchLoginFromUrl(value) {
@@ -98,6 +84,25 @@ async function fetchSiteSheets(options = {}) {
     if (cached?.sheets) return cached.sheets;
     throw error;
   }
+}
+
+function normalizeLivePayload(payload) {
+  return {
+    streams: (payload.streams || []).map((item) => ({
+      name: clean(item.name),
+      iconUrl: clean(item.iconUrl),
+      teamName: clean(item.teamName),
+      teamShortName: clean(item.teamShortName),
+      teamKey: clean(item.teamKey),
+      rank: tierValue(item.rank),
+      role: clean(item.role).toUpperCase(),
+      streamTitle: clean(item.streamTitle),
+      streamUrl: clean(item.streamUrl),
+      platform: clean(item.platform) || "twitch"
+    })),
+    updatedAt: clean(payload.updatedAt),
+    configured: Boolean(payload.configured)
+  };
 }
 
 function readCache(key, maxAgeMs = 0) {

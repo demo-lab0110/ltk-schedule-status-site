@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-01";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-02";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -233,7 +233,7 @@ async function hydrateLiveStreams(options = {}) {
 
 function startLiveRefresh() {
   if (liveTimer) window.clearInterval(liveTimer);
-  liveTimer = window.setInterval(() => hydrateLiveStreams(), 10 * 60 * 1000);
+  liveTimer = window.setInterval(() => hydrateLiveStreams(), 5 * 60 * 1000);
 }
 
 function startDataRefresh() {
@@ -3162,6 +3162,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 

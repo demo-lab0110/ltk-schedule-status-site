@@ -22,46 +22,75 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Fetch latest site data
+      - name: Fetch latest site and live data
         run: |
           node <<'NODE'
           const fs = await import("node:fs");
 
           const GAS_URL = "https://script.google.com/macros/s/AKfycbzjVYyvZ-x_LMo4Jl3261MRbAuBXrt7ZtgtzTAKT_mcU0bHVK7LiPKR13TdEgi30xY/exec";
-          const url = `${GAS_URL}?api=site&callback=__cb`;
-          const response = await fetch(url, {
-            headers: { "User-Agent": "ltk-schedule-status-site-data-updater" }
-          });
-          if (!response.ok) {
-            throw new Error(`GAS request failed: ${response.status}`);
+
+          async function fetchJsonp(api) {
+            const url = `${GAS_URL}?api=${api}&callback=__cb`;
+            const response = await fetch(url, {
+              headers: { "User-Agent": "ltk-schedule-status-site-data-updater" }
+            });
+            if (!response.ok) {
+              throw new Error(`${api} GAS request failed: ${response.status}`);
+            }
+
+            const text = (await response.text()).replace(/^\uFEFF/, "");
+            const match = text.match(/^__cb\(([\s\S]*)\);?\s*$/);
+            if (!match) {
+              throw new Error(`${api} returned invalid JSONP`);
+            }
+
+            return JSON.parse(match[1]);
           }
 
-          const text = (await response.text()).replace(/^\uFEFF/, "");
-          const match = text.match(/^__cb\(([\s\S]*)\);?\s*$/);
-          if (!match) {
-            throw new Error("Invalid JSONP response from GAS");
-          }
-
-          const payload = JSON.parse(match[1]);
-          if (!payload.ok || !payload.sheets) {
-            throw new Error(payload.error || "Invalid site data payload");
+          const sitePayload = await fetchJsonp("site");
+          if (!sitePayload.ok || !sitePayload.sheets) {
+            throw new Error(sitePayload.error || "Invalid site data payload");
           }
 
           fs.writeFileSync("site-data.json", JSON.stringify({
             ok: true,
-            updatedAt: payload.updatedAt || new Date().toISOString(),
-            sheets: payload.sheets
+            updatedAt: sitePayload.updatedAt || new Date().toISOString(),
+            sheets: sitePayload.sheets
           }));
+
+          try {
+            const livePayload = await fetchJsonp("live");
+            if (!livePayload.ok) {
+              throw new Error(livePayload.error || "Invalid live data payload");
+            }
+            fs.writeFileSync("live-data.json", JSON.stringify({
+              ok: true,
+              updatedAt: livePayload.updatedAt || new Date().toISOString(),
+              configured: Boolean(livePayload.configured),
+              streams: livePayload.streams || []
+            }));
+          } catch (error) {
+            console.warn(`LIVE update skipped: ${error.message}`);
+            if (!fs.existsSync("live-data.json")) {
+              fs.writeFileSync("live-data.json", JSON.stringify({
+                ok: true,
+                updatedAt: new Date().toISOString(),
+                configured: false,
+                streams: [],
+                error: error.message
+              }));
+            }
+          }
           NODE
 
       - name: Commit updated data
         run: |
-          if git diff --quiet -- site-data.json; then
-            echo "No site-data.json changes."
+          if git diff --quiet -- site-data.json live-data.json; then
+            echo "No data changes."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site-data.json
+          git add site-data.json live-data.json
           git commit -m "Update site data"
           git push
