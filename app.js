@@ -240,6 +240,11 @@ function bindEvents() {
       state.view = button.dataset.view;
       document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("is-active", item === button));
       document.querySelectorAll(".view").forEach((view) => view.classList.toggle("is-active", view.id === `${state.view}View`));
+      trackAnalyticsEvent("select_content", {
+        content_type: "navigation_tab",
+        item_id: state.view,
+        item_name: button.textContent.trim()
+      });
       render();
     });
   });
@@ -327,6 +332,11 @@ function renderHeaderStatus() {
   const todayMatchCount = allCalendarItems().filter((item) => item.date === today).length;
   const updated = state.lastUpdatedAt ? japanTimeLabel(state.lastUpdatedAt) : "--";
   elements.headerStatus.textContent = `LIVE配信中 ${liveCount ?? "--"}件 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
+}
+
+function trackAnalyticsEvent(eventName, params = {}) {
+  if (typeof window.gtag !== "function") return;
+  window.gtag("event", eventName, params);
 }
 
 function applyFilterPanelState() {
