@@ -218,6 +218,7 @@ function buildScrimResults(rows, teamRows, lookup) {
         rightKda: clean(row["チーム2KDA"]),
         leftGold: numberValue(row["チーム1ゴールド"]),
         rightGold: numberValue(row["チーム2ゴールド"]),
+        goldDiff15: goldDiff15Value(row),
         carry: clean(row["最大ダメージ選手"]),
         maxDamage: numberValue(row["最大ダメージ"]),
         mvp: clean(row.MVP),
@@ -376,6 +377,52 @@ function numberValue(value) {
   if (!raw) return 0;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function optionalNumberValue(value) {
+  const raw = clean(value).replace(/,/g, "");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function goldDiff15Value(row) {
+  const leftGold15 = optionalNumberValue(row["チーム1ゴールド@15"]);
+  const rightGold15 = optionalNumberValue(row["チーム2ゴールド@15"]);
+  if (leftGold15 != null && rightGold15 != null) {
+    return leftGold15 - rightGold15;
+  }
+
+  const explicitValue = optionalNumberValue(row["15分ゴールド優勢"]);
+  if (explicitValue != null) return explicitValue;
+
+  const explicitTextValue = goldDiff15TextValue(row["15分ゴールド優勢"]);
+  if (explicitTextValue != null) return explicitTextValue;
+
+  const key = Object.keys(row).find((name) => {
+    const normalized = clean(name).normalize("NFKC").toLowerCase();
+    const hasMinute15 = normalized.includes("15") || normalized.includes("@15");
+    const hasGold = normalized.includes("gold") || normalized.includes("ゴールド");
+    const hasDiff = normalized.includes("diff") || normalized.includes("差");
+    return hasMinute15 && hasGold && hasDiff;
+  });
+  if (!key) return null;
+
+  const keyedValue = optionalNumberValue(row[key]);
+  if (keyedValue != null) return keyedValue;
+  return goldDiff15TextValue(row[key]);
+}
+
+function goldDiff15TextValue(value) {
+  const raw = clean(value).normalize("NFKC");
+  if (!raw) return null;
+  const match = raw.match(/[()]\s*([+\-±]?\s*\d+(?:\.\d+)?)\s*(k|K)?\s*[)]/);
+  if (!match) return null;
+  const normalized = match[1].replace(/\s/g, "");
+  if (normalized.startsWith("±")) return 0;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * (match[2] ? 1000 : 1));
 }
 
 function tierValue(value) {

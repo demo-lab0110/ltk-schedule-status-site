@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260520-03";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-01";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1794,7 +1794,14 @@ function teamDraftPanel(teamKey, results) {
 function teamMetricPanels(teamKey, results) {
   const resultIds = new Set(results.map((result) => result.id));
   const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey);
-  const csValues = rows.map((row) => row.cs15).filter((value) => Number.isFinite(value) && value > 0);
+  const goldDiff15Values = results
+    .map((result) => {
+      if (!Number.isFinite(result.goldDiff15)) return null;
+      if (result.left === teamKey) return result.goldDiff15;
+      if (result.right === teamKey) return -result.goldDiff15;
+      return null;
+    })
+    .filter((value) => Number.isFinite(value));
   const maxDpm = rows
     .map((row) => {
       const minutes = matchDurationMinutes(row.matchId);
@@ -1810,7 +1817,7 @@ function teamMetricPanels(teamKey, results) {
         <span>リザルト画像ベース</span>
       </div>
       <div class="team-overview-grid">
-        ${teamStatCard("Avg CS@15", csValues.length ? formatInteger(csValues.reduce((sum, value) => sum + value, 0) / csValues.length) : "-", "Player average")}
+        ${teamStatCard("Gold diff@15", goldDiff15Values.length ? formatSignedInteger(goldDiff15Values.reduce((sum, value) => sum + value, 0) / goldDiff15Values.length) : "-", "Team average")}
         ${teamStatCard("Top DPM", maxDpm ? `${maxDpm.row.name} ${formatDecimal(maxDpm.dpm)}` : "-", "Best game")}
         ${teamStatCard("Top Damage", maxDamage ? `${maxDamage.name} ${formatInteger(maxDamage.damage)}` : "-", "Best game")}
       </div>
@@ -3162,6 +3169,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
