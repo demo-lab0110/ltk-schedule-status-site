@@ -1,10 +1,8 @@
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
-const STATIC_CLIPS_DATA_URL = "./clips-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
 const SITE_DATA_CACHE_KEY = "ltkdb.siteData.v1";
 const LIVE_CACHE_KEY = "ltkdb.liveData.v1";
-const CLIPS_CACHE_KEY = "ltkdb.clipVideos.v1";
 
 const TEAM_LOGOS = {
   DD: "./image/dd_emblem.png",
@@ -62,24 +60,6 @@ export async function loadLiveStreams(options = {}) {
   }
 }
 
-export async function loadClipVideos(options = {}) {
-  try {
-    const url = new URL(STATIC_CLIPS_DATA_URL, window.location.href);
-    url.searchParams.set("_", String(Math.floor(Date.now() / SITE_DATA_REFRESH_MS)));
-    const response = await fetch(url, { cache: "no-cache" });
-    if (!response.ok) throw new Error(`clips-data: ${response.status}`);
-    const payload = await response.json();
-    if (!payload.ok) throw new Error(payload.error || "clips-data: invalid payload");
-    const clipData = normalizeClipPayload(payload);
-    writeCache(CLIPS_CACHE_KEY, clipData);
-    return clipData;
-  } catch (error) {
-    const cached = readCache(CLIPS_CACHE_KEY);
-    if (cached) return cached;
-    return { videos: [], updatedAt: "", error: error.message };
-  }
-}
-
 export function twitchLoginFromUrl(value) {
   const raw = clean(value);
   if (!raw) return "";
@@ -121,28 +101,6 @@ function normalizeLivePayload(payload) {
     })),
     updatedAt: clean(payload.updatedAt),
     configured: Boolean(payload.configured)
-  };
-}
-
-function normalizeClipPayload(payload) {
-  return {
-    videos: (payload.videos || []).map((item) => ({
-      videoId: clean(item.videoId),
-      title: clean(item.title) || "無題の動画",
-      url: clean(item.url),
-      thumbnail: clean(item.thumbnail),
-      publishedAt: clean(item.publishedAt),
-      channelId: clean(item.channelId),
-      channelTitle: clean(item.channelTitle),
-      memberName: clean(item.memberName),
-      teamKey: clean(item.teamKey),
-      tier: tierValue(item.tier),
-      role: clean(item.role).toUpperCase(),
-      iconUrl: clean(item.iconUrl),
-      youtubeUrl: clean(item.youtubeUrl)
-    })).filter((item) => item.videoId && item.url),
-    updatedAt: clean(payload.updatedAt),
-    error: clean(payload.error)
   };
 }
 
