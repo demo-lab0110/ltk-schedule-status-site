@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-01";
+﻿import { loadClipVideos, loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-02";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -22,6 +22,7 @@ let schedules = [];
 let scrimResults = [];
 let teams = {};
 let liveStreams = [];
+let clipVideos = [];
 let liveTimer = null;
 let dataTimer = null;
 let dialogBackStack = [];
@@ -55,6 +56,8 @@ const elements = {
   championStats: document.querySelector("#championStats"),
   championTable: document.querySelector("#championTable"),
   championTableToggle: document.querySelector("#championTableToggle"),
+  clipsGrid: document.querySelector("#clipsGrid"),
+  clipsStatus: document.querySelector("#clipsStatus"),
   filterPanel: document.querySelector("#filterPanel"),
   filterToggle: document.querySelector("#filterToggle"),
   headerStatus: document.querySelector("#headerStatus"),
@@ -84,6 +87,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!window.FullCalendar) state.calendarMode = "cards";
   bindEvents();
   await hydrateData();
+  await hydrateClipVideos();
   await hydrateLiveStreams();
   startDataRefresh();
   startLiveRefresh();
@@ -236,9 +240,30 @@ function startLiveRefresh() {
   liveTimer = window.setInterval(() => hydrateLiveStreams(), 5 * 60 * 1000);
 }
 
+async function hydrateClipVideos(options = {}) {
+  try {
+    if (elements.clipsStatus) elements.clipsStatus.textContent = "動画データを確認中";
+    const payload = await loadClipVideos(options);
+    clipVideos = payload.videos || [];
+    if (elements.clipsStatus) {
+      elements.clipsStatus.textContent = payload.error
+        ? "動画データを取得できませんでした"
+        : `最新動画 ${clipVideos.length}件`;
+    }
+  } catch (error) {
+    console.error("Clip videos load failed.", error);
+    clipVideos = [];
+    if (elements.clipsStatus) elements.clipsStatus.textContent = "動画データを取得できませんでした";
+  }
+  if (state.view === "clips") renderClips();
+}
+
 function startDataRefresh() {
   if (dataTimer) window.clearInterval(dataTimer);
-  dataTimer = window.setInterval(() => hydrateData({ refresh: true, silent: true }), 5 * 60 * 1000);
+  dataTimer = window.setInterval(async () => {
+    await hydrateData({ refresh: true, silent: true });
+    await hydrateClipVideos({ refresh: true, silent: true });
+  }, 5 * 60 * 1000);
 }
 
 function bindEvents() {
@@ -302,6 +327,7 @@ function bindEvents() {
   });
   elements.reloadData?.addEventListener("click", async () => {
     await hydrateData({ refresh: true });
+    await hydrateClipVideos({ refresh: true });
     await hydrateLiveStreams({ refresh: true });
   });
   elements.closeDialog.addEventListener("click", () => elements.dialog.close());
@@ -326,6 +352,7 @@ function render() {
   if (state.view === "stats") renderPlayerStats();
   if (state.view === "ranking") renderRankings();
   if (state.view === "champions") renderChampions();
+  if (state.view === "clips") renderClips();
 }
 
 function markUpdated() {
@@ -339,6 +366,46 @@ function renderHeaderStatus() {
   const todayMatchCount = allCalendarItems().filter((item) => item.date === today).length;
   const updated = state.lastUpdatedAt ? japanTimeLabel(state.lastUpdatedAt) : "--";
   elements.headerStatus.textContent = `LIVE配信中 ${liveCount ?? "--"}件 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
+}
+
+function renderClips() {
+  if (!elements.clipsGrid) return;
+  const rows = clipVideos
+    .filter((item) => !state.team || item.teamKey === state.team)
+    .filter((item) => !state.tier || item.tier === state.tier)
+    .filter((item) => filterByKeyword([item], (video) => `${video.title} ${video.memberName} ${video.channelTitle} ${teamFullName(video.teamKey)} ${video.tier} ${video.role}`)[0])
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+  if (elements.clipsStatus) {
+    elements.clipsStatus.textContent = rows.length ? `表示中 ${rows.length}件` : "条件に一致する動画がありません";
+  }
+
+  if (!rows.length) {
+    elements.clipsGrid.innerHTML = `<p class="empty-state">表示できる切り抜き動画がありません。</p>`;
+    return;
+  }
+
+  elements.clipsGrid.innerHTML = rows.map((video) => `
+    <article class="clip-card" style="--team:${teams[video.teamKey]?.accent || "#14b8a6"}">
+      <a class="clip-thumb" href="${escapeAttr(video.url)}" target="_blank" rel="noreferrer">
+        ${video.thumbnail ? `<img src="${escapeAttr(video.thumbnail)}" alt="">` : `<span>NO IMAGE</span>`}
+      </a>
+      <div class="clip-card-body">
+        <div class="clip-meta-row">
+          <span>${formatClipDate(video.publishedAt)}</span>
+          <span>YouTube</span>
+        </div>
+        <h3><a href="${escapeAttr(video.url)}" target="_blank" rel="noreferrer">${video.title}</a></h3>
+        <div class="clip-member-row">
+          ${video.iconUrl ? `<img class="clip-member-icon" src="${escapeAttr(video.iconUrl)}" alt="">` : playerIcon(video.memberName || video.channelTitle)}
+          <div>
+            <strong>${video.memberName || video.channelTitle || "YouTube"}</strong>
+            <small>${teamLogo(video.teamKey, "ranking-team-logo")}${teamShortName(video.teamKey)} / ${video.tier || "-"} / ${video.role || "-"}</small>
+          </div>
+        </div>
+      </div>
+    </article>
+  `).join("");
 }
 
 function trackAnalyticsEvent(eventName, params = {}) {
@@ -3094,6 +3161,20 @@ function shortDate(dateValue) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function formatClipDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
 function escapeAttr(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -3169,6 +3250,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
