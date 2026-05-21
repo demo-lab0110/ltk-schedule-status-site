@@ -29,6 +29,7 @@ export async function loadSiteData(options = {}) {
   const playerRows = sheets["リザルト詳細"] || sheets["サイト_試合プレイヤー実績"] || [];
   const bpSourceRows = sheets["BP詳細"] || sheets["サイト_BP実績"] || [];
   const championRows = sheets["チャンピオンアイコン"] || [];
+  const clipRows = sheets["切り抜き動画"] || sheets["クリップ"] || [];
   const lookup = buildTeamLookup(teamRows);
 
   return {
@@ -38,7 +39,8 @@ export async function loadSiteData(options = {}) {
     participants: buildParticipants(profileRows, teamRows, lookup),
     playerMatches: buildPlayerMatches(playerRows, teamRows, lookup),
     bpRows: buildBpRows(bpSourceRows, teamRows, lookup),
-    championIcons: buildChampionIcons(championRows)
+    championIcons: buildChampionIcons(championRows),
+    clipVideos: buildClipVideos(clipRows, teamRows, lookup)
   };
 }
 
@@ -291,6 +293,46 @@ function buildChampionIcons(rows) {
   return icons;
 }
 
+function buildClipVideos(rows, teamRows, lookup) {
+  return rows
+    .filter((row) => {
+      const visible = clean(row["サイト表示"]) || clean(row.site_visible) || clean(row.visible);
+      return !visible || truthyValue(visible);
+    })
+    .map((row) => {
+      const teamKey = clean(row.team_key) || resolveTeam(row["チーム名"], teamRows, lookup);
+      const publishedAt = dateTimeValue(
+        row.published_at ||
+        row["投稿日"] ||
+        row["投稿日時"],
+        row.publish_time ||
+        row["投稿時間"]
+      );
+      return {
+        videoId: clean(row.video_id) || youtubeVideoIdFromUrl(row.url || row["動画URL"]),
+        title: clean(row.title) || clean(row["動画タイトル"]) || "無題の動画",
+        url: clean(row.url) || clean(row["動画URL"]),
+        thumbnail: clean(row.thumbnail) || clean(row.thumbnail_url) || clean(row["サムネイルURL"]),
+        publishedAt,
+        publishDate: dateValue(row.publish_date || row["投稿日"]),
+        publishTime: eventTimeValue(row.publish_time || row["投稿時間"]),
+        channelId: clean(row.channel_id) || clean(row["チャンネルID"]),
+        channelTitle: clean(row.channel_title) || clean(row["チャンネル名"]),
+        memberName: clean(row.member_name) || clean(row["メンバー名"]) || clean(row["名前"]),
+        teamKey,
+        tier: tierValue(row.tier || row["階級"]),
+        role: clean(row.role || row["ロール"]).toUpperCase(),
+        iconUrl: clean(row.icon_url) || clean(row["アイコン"]),
+        youtubeUrl: clean(row.youtube_url) || clean(row["YouTubeチャンネル"]),
+        videoType: clean(row.video_type) || clean(row["動画種別"]),
+        related: truthyValue(row.related || row["LTK/LOL判定"]),
+        siteVisible: truthyValue(row.site_visible || row["サイト表示"])
+      };
+    })
+    .filter((item) => item.url && item.title)
+    .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+}
+
 function buildTeamLookup(rows) {
   const lookup = {};
   rows.forEach((row) => {
@@ -335,6 +377,12 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function truthyValue(value) {
+  const normalized = clean(value).normalize("NFKC").toUpperCase();
+  if (!normalized) return false;
+  return ["TRUE", "1", "YES", "ON", "表示", "対象"].includes(normalized);
+}
+
 function isNoBanChampion(value) {
   const key = clean(value).normalize("NFKC").toUpperCase().replace(/[\s_\-・ー]/g, "");
   return ["NOBAN", "BANなし", "BAN無し", "バンなし", "バン無し", "なし", "無し"].includes(key);
@@ -370,6 +418,24 @@ function eventTimeValue(value) {
     }).format(parsed);
   }
   return "";
+}
+
+function dateTimeValue(dateInput, timeInput) {
+  const date = dateValue(dateInput);
+  const time = eventTimeValue(timeInput);
+  if (date && time) return `${date}T${time}:00+09:00`;
+  const raw = clean(dateInput);
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  return date;
+}
+
+function youtubeVideoIdFromUrl(value) {
+  const raw = clean(value);
+  if (!raw) return "";
+  const match = raw.match(/(?:watch\?v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);
+  return match ? match[1] : "";
 }
 
 function numberValue(value) {

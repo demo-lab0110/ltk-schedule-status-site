@@ -1,7 +1,12 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-01";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-03";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
+const CLIP_WATCHED_STORAGE_KEY = "ltkdb.watchedClipIds.v1";
+const CLIP_RECENT_DAYS = 7;
+const CLIP_PAGE_SIZE = 24;
+const CLIPS_PREVIEW_ENABLED = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  || new URLSearchParams(window.location.search).get("preview") === "clips";
 const ROLE_ORDER = ["TOP", "JG", "MID", "ADC", "SUP"];
 const DRAFT_SLOTS = {
   BLUE: {
@@ -22,6 +27,8 @@ let schedules = [];
 let scrimResults = [];
 let teams = {};
 let liveStreams = [];
+let clipVideos = [];
+let watchedClipIds = readWatchedClipIds();
 let liveTimer = null;
 let dataTimer = null;
 let dialogBackStack = [];
@@ -42,7 +49,8 @@ const state = {
   fullCalendar: null,
   playerStatsSort: { key: "kda", direction: "desc" },
   championStatsSort: { key: "presence", direction: "desc" },
-  championTableOpen: true
+  championTableOpen: true,
+  clipPage: 1
 };
 
 const elements = {
@@ -55,6 +63,9 @@ const elements = {
   championStats: document.querySelector("#championStats"),
   championTable: document.querySelector("#championTable"),
   championTableToggle: document.querySelector("#championTableToggle"),
+  clipsGrid: document.querySelector("#clipsGrid"),
+  clipsPagination: document.querySelector("#clipsPagination"),
+  clipsStatus: document.querySelector("#clipsStatus"),
   filterPanel: document.querySelector("#filterPanel"),
   filterToggle: document.querySelector("#filterToggle"),
   headerStatus: document.querySelector("#headerStatus"),
@@ -78,6 +89,8 @@ const elements = {
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
+  ensureAnalytics();
+  applyFeatureFlags();
   setupHeaderEnhancements();
   moveFilterPanel();
   applyFilterPanelState();
@@ -192,6 +205,7 @@ function applyData(data) {
   schedules = data.schedules || [];
   scrimResults = data.scrimResults || [];
   teams = data.teams || {};
+  clipVideos = data.clipVideos || [];
   populateTeamFilter();
 }
 
@@ -238,13 +252,17 @@ function startLiveRefresh() {
 
 function startDataRefresh() {
   if (dataTimer) window.clearInterval(dataTimer);
-  dataTimer = window.setInterval(() => hydrateData({ refresh: true, silent: true }), 5 * 60 * 1000);
+  dataTimer = window.setInterval(async () => {
+    await hydrateData({ refresh: true, silent: true });
+  }, 5 * 60 * 1000);
 }
 
 function bindEvents() {
+  document.addEventListener("click", handleGlobalAnalyticsClick);
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => {
       state.view = button.dataset.view;
+      if (state.view === "clips" && !CLIPS_PREVIEW_ENABLED) state.view = "calendar";
       document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("is-active", item === button));
       document.querySelectorAll(".view").forEach((view) => view.classList.toggle("is-active", view.id === `${state.view}View`));
       trackAnalyticsEvent("select_content", {
@@ -274,26 +292,44 @@ function bindEvents() {
 
   elements.typeFilter.addEventListener("change", () => {
     state.type = elements.typeFilter.value;
+    trackFilterChange("type", state.type);
     render();
   });
   elements.tierFilter.addEventListener("change", () => {
     state.tier = elements.tierFilter.value;
+    trackFilterChange("tier", state.tier);
     render();
   });
   elements.teamFilter?.addEventListener("change", () => {
     state.team = elements.teamFilter.value;
+    if (state.view === "clips") state.clipPage = 1;
+    trackAnalyticsEvent(state.view === "clips" ? "clip_team_filter_click" : "filter_change", {
+      filter_name: "team",
+      filter_value: state.team || "all",
+      view: state.view
+    });
+    if (state.view === "clips") {
+      trackAnalyticsEvent("clip_filter_click", {
+        filter_name: "team",
+        filter_value: state.team || "all",
+        view: state.view
+      });
+    }
     render();
   });
   elements.keywordFilter.addEventListener("input", () => {
     state.keyword = elements.keywordFilter.value.trim().toLocaleLowerCase("ja");
+    trackFilterChange("keyword", state.keyword ? "filled" : "empty");
     render();
   });
   elements.excludeScrimsFilter?.addEventListener("change", () => {
     state.excludeScrims = elements.excludeScrimsFilter.checked;
+    trackFilterChange("exclude_scrims", state.excludeScrims ? "on" : "off");
     render();
   });
   elements.excludeViewerFilter?.addEventListener("change", () => {
     state.excludeViewer = elements.excludeViewerFilter.checked;
+    trackFilterChange("exclude_viewer", state.excludeViewer ? "on" : "off");
     render();
   });
   elements.filterToggle?.addEventListener("click", () => {
@@ -317,6 +353,13 @@ function bindEvents() {
   narrowLayoutQuery.addEventListener("change", applyFilterPanelState);
 }
 
+function applyFeatureFlags() {
+  if (CLIPS_PREVIEW_ENABLED) return;
+  document.querySelectorAll('[data-view="clips"]').forEach((element) => element.remove());
+  document.querySelector("#clipsView")?.classList.remove("is-active");
+  if (state.view === "clips") state.view = "calendar";
+}
+
 function render() {
   renderHeaderStatus();
   renderLiveNow();
@@ -326,6 +369,7 @@ function render() {
   if (state.view === "stats") renderPlayerStats();
   if (state.view === "ranking") renderRankings();
   if (state.view === "champions") renderChampions();
+  if (state.view === "clips") renderClips();
 }
 
 function markUpdated() {
@@ -341,9 +385,221 @@ function renderHeaderStatus() {
   elements.headerStatus.textContent = `LIVE配信中 ${liveCount ?? "--"}件 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
 }
 
+function renderClips() {
+  if (!elements.clipsGrid) return;
+  const allFilteredRows = clipVideos
+    .filter((item) => !state.team || item.teamKey === state.team)
+    .filter((item) => !state.tier || item.tier === state.tier)
+    .filter((item) => filterByKeyword([item], (video) => `${video.title} ${video.memberName} ${video.channelTitle} ${teamFullName(video.teamKey)} ${video.tier} ${video.role}`)[0])
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  const rows = allFilteredRows.filter(isRecentClip);
+  const totalPages = Math.max(1, Math.ceil(rows.length / CLIP_PAGE_SIZE));
+  if (state.clipPage > totalPages) state.clipPage = totalPages;
+  if (state.clipPage < 1) state.clipPage = 1;
+  const pageRows = rows.slice((state.clipPage - 1) * CLIP_PAGE_SIZE, state.clipPage * CLIP_PAGE_SIZE);
+
+  if (elements.clipsStatus) {
+    elements.clipsStatus.textContent = rows.length
+      ? `直近${CLIP_RECENT_DAYS}日 ${rows.length}件 / ${state.clipPage}ページ目`
+      : `直近${CLIP_RECENT_DAYS}日に条件に一致する動画がありません`;
+  }
+
+  if (!rows.length) {
+    elements.clipsGrid.innerHTML = `<p class="empty-state">表示できる切り抜き動画がありません。</p>`;
+    renderClipPagination(0, 0);
+    return;
+  }
+
+  const groups = pageRows.reduce((acc, video) => {
+    const { date } = formatClipDateParts(video.publishedAt);
+    const key = date || "投稿日不明";
+    if (!acc.has(key)) acc.set(key, []);
+    acc.get(key).push(video);
+    return acc;
+  }, new Map());
+
+  elements.clipsGrid.innerHTML = [...groups.entries()].map(([date, videos]) => `
+    <section class="clip-date-section">
+      <h3 class="clip-date-heading">${date}</h3>
+      <div class="clip-date-grid">
+        ${videos.map((video) => {
+          const { time } = formatClipDateParts(video.publishedAt);
+          const clipKey = clipWatchKey(video);
+          const watched = watchedClipIds.has(clipKey);
+          return `
+            <article class="clip-card${watched ? " is-watched" : ""}" data-clip-card="${escapeAttr(clipKey)}" style="--team:${teams[video.teamKey]?.accent || "#14b8a6"}">
+              <a class="clip-thumb clip-watch-link" href="${escapeAttr(video.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clipKey)}">
+                ${video.thumbnail ? `<img src="${escapeAttr(video.thumbnail)}" alt="">` : `<span>NO IMAGE</span>`}
+                ${watched ? `<span class="clip-watched-badge">視聴済み</span>` : ""}
+              </a>
+              <div class="clip-card-body">
+                <div class="clip-member-row">
+                  ${video.iconUrl ? `<img class="clip-member-icon" src="${escapeAttr(video.iconUrl)}" alt="">` : playerIcon(video.memberName || video.channelTitle)}
+                  <div>
+                    <button class="clip-player-button" type="button" data-clip-player="${escapeAttr(video.memberName || video.channelTitle || "YouTube")}" data-clip-team="${escapeAttr(video.teamKey || "")}">
+                      ${video.memberName || video.channelTitle || "YouTube"}
+                    </button>
+                    <small>${teamLogo(video.teamKey, "ranking-team-logo")}${teamShortName(video.teamKey)} / ${video.tier || "-"} / ${video.role || "-"}</small>
+                  </div>
+                </div>
+                <h3><a class="clip-watch-link" href="${escapeAttr(video.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clipKey)}">${video.title}</a></h3>
+                <div class="clip-meta-row">
+                  <span>投稿日 ${date}</span>
+                  <span>投稿時間 ${time || "--:--"}</span>
+                </div>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `).join("");
+
+  elements.clipsGrid.querySelectorAll(".clip-watch-link").forEach((link) => {
+    link.addEventListener("click", () => {
+      markClipWatched(link.dataset.clipId);
+      const video = clipVideos.find((item) => clipWatchKey(item) === link.dataset.clipId);
+      trackAnalyticsEvent("clip_video_click", {
+        video_id: video?.videoId || link.dataset.clipId || "",
+        video_title: video?.title || "",
+        player_name: video?.memberName || "",
+        team_key: video?.teamKey || "",
+        tier: video?.tier || "",
+        role: video?.role || "",
+        destination_url: video?.url || link.href || ""
+      });
+    });
+  });
+  elements.clipsGrid.querySelectorAll(".clip-player-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      trackAnalyticsEvent("clip_player_click", {
+        player_name: button.dataset.clipPlayer || "",
+        team_key: button.dataset.clipTeam || "",
+        view: "clips"
+      });
+    });
+  });
+  renderClipPagination(rows.length, totalPages);
+}
+
+function renderClipPagination(totalRows, totalPages) {
+  if (!elements.clipsPagination) return;
+  if (!totalRows || totalPages <= 1) {
+    elements.clipsPagination.innerHTML = "";
+    return;
+  }
+  elements.clipsPagination.innerHTML = `
+    <button type="button" class="clip-page-button" data-clip-page="${state.clipPage - 1}" ${state.clipPage <= 1 ? "disabled" : ""}>前へ</button>
+    <span>${state.clipPage} / ${totalPages}</span>
+    <button type="button" class="clip-page-button" data-clip-page="${state.clipPage + 1}" ${state.clipPage >= totalPages ? "disabled" : ""}>次へ</button>
+  `;
+  elements.clipsPagination.querySelectorAll("[data-clip-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.dataset.clipPage);
+      if (!Number.isFinite(nextPage)) return;
+      state.clipPage = Math.max(1, Math.min(totalPages, nextPage));
+      trackAnalyticsEvent("clip_filter_click", {
+        filter_name: "pagination",
+        filter_value: String(state.clipPage),
+        view: "clips"
+      });
+      renderClips();
+    });
+  });
+}
+
+function isRecentClip(video) {
+  const date = new Date(video?.publishedAt || "");
+  if (Number.isNaN(date.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - CLIP_RECENT_DAYS);
+  return date >= cutoff;
+}
+
+function trackFilterChange(filterName, filterValue) {
+  trackAnalyticsEvent(state.view === "clips" ? "clip_filter_click" : "filter_change", {
+    filter_name: filterName,
+    filter_value: filterValue || "all",
+    view: state.view
+  });
+  if (state.view === "clips") state.clipPage = 1;
+}
+
+function readWatchedClipIds() {
+  try {
+    const raw = window.localStorage?.getItem(CLIP_WATCHED_STORAGE_KEY);
+    const values = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(values) ? values.map(String).filter(Boolean) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeWatchedClipIds() {
+  try {
+    window.localStorage?.setItem(CLIP_WATCHED_STORAGE_KEY, JSON.stringify([...watchedClipIds]));
+  } catch {
+    // 視聴済みは補助表示なので、保存できない環境では静かに諦める。
+  }
+}
+
+function clipWatchKey(video) {
+  return String(video?.videoId || video?.url || video?.title || "").trim();
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+function markClipWatched(clipId) {
+  if (!clipId || watchedClipIds.has(clipId)) return;
+  watchedClipIds.add(clipId);
+  writeWatchedClipIds();
+  elements.clipsGrid?.querySelector(`[data-clip-card="${cssEscape(clipId)}"]`)?.classList.add("is-watched");
+  elements.clipsGrid?.querySelector(`[data-clip-card="${cssEscape(clipId)}"] .clip-thumb`)?.insertAdjacentHTML(
+    "beforeend",
+    `<span class="clip-watched-badge">視聴済み</span>`
+  );
+}
+
 function trackAnalyticsEvent(eventName, params = {}) {
+  ensureAnalytics();
   if (typeof window.gtag !== "function") return;
   window.gtag("event", eventName, params);
+}
+
+function handleGlobalAnalyticsClick(event) {
+  const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+  if (!target) return;
+
+  const socialLink = target.closest(".sns-link:not(.is-off)");
+  if (socialLink) {
+    const participant = socialLink.closest(".participant-card");
+    trackAnalyticsEvent("social_link_click", {
+      platform: socialLink.getAttribute("aria-label") || "",
+      destination_url: socialLink.getAttribute("href") || "",
+      player_name: participant?.querySelector(".participant-meta strong")?.textContent?.trim() || "",
+      source_view: state.view
+    });
+  }
+
+  const contactLink = target.closest(".contact-form-link");
+  if (contactLink) {
+    trackAnalyticsEvent("contact_click", {
+      destination_url: contactLink.getAttribute("href") || "",
+      source_view: state.view
+    });
+  }
+}
+
+function ensureAnalytics() {
+  window.dataLayer = window.dataLayer || [];
+  if (typeof window.gtag !== "function") {
+    window.gtag = function gtag() {
+      window.dataLayer.push(arguments);
+    };
+  }
 }
 
 function applyFilterPanelState() {
@@ -384,6 +640,16 @@ function liveNowCard(stream) {
     <p class="live-title">${stream.streamTitle || "League of Legends"}</p>
     <span class="live-link">Twitchで見る</span>
   `;
+  card.addEventListener("click", () => {
+    trackAnalyticsEvent("live_stream_click", {
+      player_name: stream.name || "",
+      team_key: stream.teamKey || "",
+      tier: stream.rank || "",
+      role: stream.role || "",
+      stream_url: stream.streamUrl || "",
+      platform: "twitch"
+    });
+  });
   return card;
 }
 
@@ -794,6 +1060,16 @@ function resultLine(item) {
 
 function openMatch(item, options = {}) {
   prepareDialogNavigation({ type: "match", item }, options);
+  trackAnalyticsEvent("match_detail_open", {
+    match_id: item.id || "",
+    schedule_id: item.scheduleId || item.id || "",
+    date: item.date || "",
+    tier: item.tier || "",
+    match_type: item.matchType || item.type || "",
+    left_team: item.left || "",
+    right_team: item.right || "",
+    source_view: state.view
+  });
   elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} ${item.eventTime ? `${item.eventTime} ` : ""}${item.day} ${item.match} / ${item.type}`;
   elements.dialogTitle.textContent = isViewerScrim(item)
     ? `${viewerHomeLabel(item)} vs ${VIEWER_OPPONENT_LABEL}`
@@ -1195,6 +1471,13 @@ function playerStatsTeam(item) {
 
 function openPlayerDetail(item, options = {}) {
   prepareDialogNavigation({ type: "player", item }, options);
+  trackAnalyticsEvent("player_detail_open", {
+    player_name: item.name || "",
+    team_key: item.team || "",
+    tier: item.tier || "",
+    role: item.role || "",
+    source_view: state.view
+  });
   const rows = competitivePlayerMatches()
     .filter((row) => row.name === item.name && row.team === item.team && row.role === item.role)
     .sort((a, b) => {
@@ -1518,6 +1801,14 @@ function openLeagueResults(resultIdsValue, options = {}) {
   const ids = String(resultIdsValue || "").split(",").map((id) => id.trim()).filter(Boolean);
   const results = ids.map((id) => scrimResults.find((result) => result.id === id)).filter(Boolean);
   if (!results.length) return;
+  trackAnalyticsEvent("league_result_open", {
+    result_ids: ids.join(","),
+    games: results.length,
+    tier: results[0]?.tier || "",
+    left_team: results[0]?.left || "",
+    right_team: results[0]?.right || "",
+    source_view: state.view
+  });
   const first = results[0];
   const item = {
     id: `league_${ids.join("_")}`,
@@ -1690,6 +1981,13 @@ function filteredTeamResults() {
 
 function openTeamDetail(item, options = {}) {
   prepareDialogNavigation({ type: "team", item }, options);
+  trackAnalyticsEvent("team_detail_open", {
+    team_key: item.team || "",
+    team_name: teamFullName(item.team),
+    tier: item.tier || "",
+    matches: item.matches || 0,
+    source_view: state.view
+  });
   const results = item.resultIds
     .map((id) => scrimResults.find((row) => row.id === id))
     .filter(Boolean)
@@ -2406,6 +2704,12 @@ function championRoleDisplay(role) {
 }
 
 function openChampionDetail(item, title, mode) {
+  trackAnalyticsEvent("champion_detail_open", {
+    champion: item.champion || "",
+    detail_title: title || "",
+    detail_mode: mode || "",
+    source_view: state.view
+  });
   elements.dialogMeta.textContent = `Champion / ${title}`;
   elements.dialogTitle.textContent = item.champion;
   const roles = selectedChampionRoles();
@@ -2461,6 +2765,14 @@ function championDetailRows(title, rows, winsOnly) {
 }
 
 function openChampionStatsDetail(item, tiers, roles) {
+  trackAnalyticsEvent("champion_detail_open", {
+    champion: item.champion || "",
+    detail_title: "Champion Stats",
+    detail_mode: "stats",
+    tiers: tiers.join(","),
+    roles: roles.join(","),
+    source_view: state.view
+  });
   const rows = competitivePlayerMatches()
     .filter((row) => row.champion === item.champion)
     .filter((row) => tiers.includes(row.tier))
@@ -3094,6 +3406,24 @@ function shortDate(dateValue) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function formatClipDateParts(value) {
+  if (!value) return { date: "", time: "" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { date: "", time: "" };
+  const dateLabel = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    month: "numeric",
+    day: "numeric"
+  }).format(date);
+  const timeLabel = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+  return { date: dateLabel, time: timeLabel };
+}
+
 function escapeAttr(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -3169,6 +3499,8 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
+
 
 
 

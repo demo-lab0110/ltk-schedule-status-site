@@ -14,8 +14,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=20260515-01">
-    <script type="module" src="./app.js?v=20260521-01"></script>
+    <link rel="stylesheet" href="./styles.css?v=20260521-06">
+    <script type="module" src="./app.js?v=20260521-06"></script>
   </head>
   <body>
     <header class="topbar">
@@ -38,6 +38,7 @@
           <button class="tab-button" data-view="stats">個人成績</button>
           <button class="tab-button" data-view="ranking">個人ランキング</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
+          <button class="tab-button" data-view="clips">切り抜き動画</button>
         </nav>
         <button id="filterToggle" class="filter-toggle-button nav-filter-toggle" type="button">隠す</button>
       </div>
@@ -148,6 +149,24 @@
           <button id="championTableToggle" class="subsection-toggle" type="button" aria-expanded="true" aria-controls="championTable">閉じる</button>
         </div>
         <div id="championTable" class="table-shell"></div>
+      </section>
+
+      <section id="clipsView" class="view" aria-label="切り抜き動画">
+        <div class="section-heading">
+          <h2>切り抜き動画</h2>
+          <p>選手一覧に登録されたYouTubeチャンネルの最新動画を表示します。</p>
+        </div>
+        <div class="subsection-heading clips-heading">
+          <h3>最新動画</h3>
+          <p id="clipsStatus" class="muted">動画データを確認中</p>
+        </div>
+        <div id="clipsGrid" class="clips-grid"></div>
+        <div id="clipsPagination" class="clip-pagination" aria-label="切り抜き動画ページ送り"></div>
+        <p class="clip-disclaimer">
+          本ページはYouTube上で公開されている動画情報を、LTK観戦の補助を目的として整理している非公式ページです。
+          動画の権利は各投稿者・権利者に帰属します。
+          掲載内容に問題がある場合はお問い合わせよりご連絡ください。
+        </p>
       </section>
 
       <section id="aboutView" class="view" aria-label="このサイトについて">
@@ -303,6 +322,7 @@
     </dialog>
   </body>
 </html>
+
 
 
 
