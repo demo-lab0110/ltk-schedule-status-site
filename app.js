@@ -664,73 +664,20 @@ function allCalendarItems() {
 }
 
 function buildCalendarItems() {
-  const map = new Map();
-  const standalone = [];
   const resultById = new Map(scrimResults.map((result) => [result.id, result]));
-  const usedResultIds = new Set();
-
-  schedules.forEach((item) => {
-    if (item.status === "tbd") {
-      standalone.push({ ...item, results: [] });
-      return;
-    }
-
-    if (item.linkedResultIds?.length) {
-      const linkedResults = item.linkedResultIds
-        .map((id) => resultById.get(id))
-        .filter(Boolean);
-      linkedResults.forEach((result) => usedResultIds.add(result.id));
-      map.set(`SCHEDULE_${item.id}`, {
+  return schedules
+    .map((item) => {
+      const linkedResults = item.linkedResultIds?.length
+        ? item.linkedResultIds.map((id) => resultById.get(id)).filter(Boolean)
+        : [];
+      return {
         ...item,
         results: linkedResults,
         resultSource: linkedResults.length > 0,
         status: linkedResults.length && item.status === "scheduled" ? "completed" : item.status,
-        viewerMatch: linkedResults.some((result) => result.viewerMatch)
-      });
-      return;
-    }
-
-    const key = calendarKey(item);
-    if (!map.has(key)) {
-      map.set(key, { ...item, results: [], resultSource: false });
-    }
-  });
-
-  scrimResults.forEach((result) => {
-    if (usedResultIds.has(result.id)) return;
-    const key = calendarKey(result);
-    if (!map.has(key)) {
-      map.set(key, {
-        id: `AUTO_${key}`,
-        date: result.date,
-        eventTime: "",
-        day: "RESULT",
-        match: "Scrim",
-        type: result.type || "スクリム結果",
-        matchType: result.matchType || result.matchKind || result.type || "",
-        stage: "RESULT",
-        matchName: result.matchName || "スクリム",
-        tier: result.tier,
-        left: result.left,
-        right: result.right,
-        leftLabel: result.leftLabel,
-        rightLabel: result.rightLabel,
-        blue: "",
-        red: "",
-        status: "completed",
-        results: [],
-        resultSource: true,
-        viewerMatch: result.viewerMatch
-      });
-    }
-    const item = map.get(key);
-    item.results.push(result);
-    item.resultSource = true;
-    item.viewerMatch ||= result.viewerMatch;
-    if (item.status === "scheduled") item.status = "completed";
-  });
-
-  return [...standalone, ...map.values()]
+        viewerMatch: item.viewerMatch || linkedResults.some((result) => result.viewerMatch)
+      };
+    })
     .map((item) => ({ ...item, resultRecord: item.results?.length ? summarizeResults(item.results, item.left, item.right) : null }))
     .sort(compareCalendarItems);
 }
@@ -836,7 +783,7 @@ function renderFullCalendar(items) {
       initialDate: "2026-05-01",
       height: "auto",
       fixedWeekCount: false,
-      dayMaxEvents: 4,
+      dayMaxEvents: 2,
       displayEventTime: false,
       eventOrder: "sortOrder",
       headerToolbar: { left: "prev,next today", center: "title", right: "" },
