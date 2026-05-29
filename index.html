@@ -38,7 +38,7 @@
           <button class="tab-button" data-view="stats">個人成績</button>
           <button class="tab-button" data-view="ranking">個人ランキング</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
-          <button class="tab-button" data-view="clips">切り抜き動画</button>
+          <button class="tab-button" data-view="clips" data-clips-preview hidden>切り抜き動画</button>
         </nav>
       </div>
     </header>
@@ -150,7 +150,7 @@
         <div id="championTable" class="table-shell"></div>
       </section>
 
-      <section id="clipsView" class="view" aria-label="切り抜き動画">
+      <section id="clipsView" class="view" aria-label="切り抜き動画" data-clips-preview hidden>
         <div class="section-heading">
           <div class="clips-title-row">
             <h2>切り抜き動画</h2>

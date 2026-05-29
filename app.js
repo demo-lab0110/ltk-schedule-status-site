@@ -600,8 +600,10 @@ function closeClipWarningModal() {
 }
 
 function applyFeatureFlags() {
+  document.querySelectorAll("[data-clips-preview]").forEach((element) => {
+    element.hidden = !CLIPS_PREVIEW_ENABLED;
+  });
   if (CLIPS_PREVIEW_ENABLED) return;
-  document.querySelectorAll('[data-view="clips"]').forEach((element) => element.remove());
   document.querySelector("#clipsView")?.classList.remove("is-active");
   if (state.view === "clips") state.view = "calendar";
 }
