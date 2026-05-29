@@ -14,8 +14,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=20260521-06">
-    <script type="module" src="./app.js?v=20260521-06"></script>
+    <link rel="stylesheet" href="./styles.css?v=20260521-07">
+    <script type="module" src="./app.js?v=20260521-07"></script>
   </head>
   <body>
     <header class="topbar">
@@ -40,7 +40,6 @@
           <button class="tab-button" data-view="champions">チャンピオン</button>
           <button class="tab-button" data-view="clips">切り抜き動画</button>
         </nav>
-        <button id="filterToggle" class="filter-toggle-button nav-filter-toggle" type="button">隠す</button>
       </div>
     </header>
 
@@ -153,8 +152,39 @@
 
       <section id="clipsView" class="view" aria-label="切り抜き動画">
         <div class="section-heading">
-          <h2>切り抜き動画</h2>
-          <p>選手一覧に登録されたYouTubeチャンネルの最新動画を表示します。</p>
+          <div class="clips-title-row">
+            <h2>切り抜き動画</h2>
+            <div id="clipTeamNotice" class="clip-team-notice" hidden>
+              <span data-clip-team-label>全チーム表示中</span>
+              <button type="button" data-change-clip-team>表示を変える</button>
+            </div>
+          </div>
+          <p>LTK観戦の補助になるYouTube動画とTwitchクリップをまとめて確認できます。</p>
+        </div>
+        <div class="clip-source-tabs" role="tablist" aria-label="切り抜き動画ソース">
+          <button class="clip-source-tab is-active" type="button" data-clip-source="youtube">YouTube</button>
+          <button class="clip-source-tab" type="button" data-clip-source="twitch">Twitch Clips</button>
+        </div>
+        <div id="twitchClipIntro" class="twitch-clip-intro" hidden>
+          <div>
+            <strong>お気に入りのLTK Twitchクリップを募集しています。</strong>
+            <p>名場面を見つけたら、URLをフォームから投稿してください。内容確認後、サイトに掲載する場合があります。</p>
+          </div>
+          <a id="twitchClipFormLink" class="clip-submit-link" href="#" target="_blank" rel="noreferrer" aria-disabled="true">クリップを投稿する</a>
+        </div>
+        <div id="twitchClipFilters" class="twitch-clip-filters" hidden>
+          <label>
+            選手名
+            <input id="twitchClipPlayerFilter" type="search" placeholder="関連選手で絞り込み">
+          </label>
+          <label>
+            並び順
+            <select id="twitchClipSortFilter">
+              <option value="new">新着順</option>
+              <option value="views">再生数順</option>
+              <option value="likes">いいね数順</option>
+            </select>
+          </label>
         </div>
         <div class="subsection-heading clips-heading">
           <h3>最新動画</h3>
@@ -229,6 +259,11 @@
               本サイトは、参加者プロフィールやLIVE NOW表示のために、X、YouTube、Twitchなど外部サービスへのリンクや配信情報を参照します。
               外部サイトで提供される情報や利用条件は、それぞれのサービスの規約を確認してください。
             </p>
+            <p>
+              Twitchクリップページでは、Twitch APIを利用して、Twitch上で公開されているクリップ情報を表示します。
+              クリップ動画、サムネイル、タイトル等の権利は、各配信者・投稿者および権利者に帰属します。
+              掲載内容に問題がある場合は、お問い合わせよりご連絡ください。確認後、速やかに修正または掲載停止します。
+            </p>
           </section>
 
           <section class="info-block">
@@ -299,13 +334,24 @@
       </section>
       </div>
 
-      <aside id="filterPanel" class="filter-panel" aria-label="FILTER">
-        <div class="sidebar-heading">
-          <p class="eyebrow">FILTER</p>
-          <div class="filter-heading-row">
-            <h2>表示条件</h2>
+      <aside class="right-rail" aria-label="NEWS and FILTER">
+        <section id="newsPanel" class="news-panel" aria-label="NEWS">
+          <div class="sidebar-heading">
+            <p class="eyebrow">NEWS</p>
+            <h2>更新情報</h2>
           </div>
-        </div>
+          <div id="newsList" class="news-list"></div>
+        </section>
+
+        <aside id="filterPanel" class="filter-panel" aria-label="FILTER">
+          <div class="sidebar-heading">
+            <p class="eyebrow">FILTER</p>
+            <div class="filter-heading-row">
+              <h2>表示条件</h2>
+              <button id="filterToggle" class="filter-toggle-button" type="button">隠す</button>
+            </div>
+          </div>
+        </aside>
       </aside>
     </main>
 

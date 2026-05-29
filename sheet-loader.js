@@ -30,6 +30,8 @@ export async function loadSiteData(options = {}) {
   const bpSourceRows = sheets["BP詳細"] || sheets["サイト_BP実績"] || [];
   const championRows = sheets["チャンピオンアイコン"] || [];
   const clipRows = sheets["切り抜き動画"] || sheets["クリップ"] || [];
+  const twitchClipRows = sheets["Twitchクリップ一覧"] || [];
+  const newsRows = sheets["サイト_NEWS"] || [];
   const lookup = buildTeamLookup(teamRows);
 
   return {
@@ -40,7 +42,9 @@ export async function loadSiteData(options = {}) {
     playerMatches: buildPlayerMatches(playerRows, teamRows, lookup),
     bpRows: buildBpRows(bpSourceRows, teamRows, lookup),
     championIcons: buildChampionIcons(championRows),
-    clipVideos: buildClipVideos(clipRows, teamRows, lookup)
+    clipVideos: buildClipVideos(clipRows, teamRows, lookup),
+    twitchClips: buildTwitchClips(twitchClipRows, teamRows, lookup),
+    siteNews: buildSiteNews(newsRows, teamRows, lookup)
   };
 }
 
@@ -331,6 +335,82 @@ function buildClipVideos(rows, teamRows, lookup) {
     })
     .filter((item) => item.url && item.title)
     .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+}
+
+function buildTwitchClips(rows, teamRows, lookup) {
+  return rows
+    .filter((row) => clean(row["ステータス"]) === "掲載OK")
+    .map((row) => {
+      const teamKey = clean(row.team_key) || resolveTeam(row["チーム名"], teamRows, lookup);
+      const createdAt = dateTimeValue(row.created_at || row["created_at"], "");
+      return {
+        source: "twitch",
+        clipId: clean(row.clip_id),
+        title: clean(row.title) || "Twitch Clip",
+        thumbnailUrl: clean(row.thumbnail_url),
+        url: clean(row.clip_url),
+        embedUrl: clean(row.embed_url),
+        broadcasterId: clean(row.broadcaster_id),
+        broadcasterName: clean(row.broadcaster_name),
+        creatorId: clean(row.creator_id),
+        creatorName: clean(row.creator_name),
+        videoId: clean(row.video_id),
+        gameId: clean(row.game_id),
+        language: clean(row.language),
+        viewCount: numberValue(row.view_count),
+        likeCount: numberValue(row.like_count || row["いいね数"]),
+        createdAt,
+        duration: numberValue(row.duration),
+        relatedPlayerName: clean(row["関連選手名"]),
+        teamKey,
+        teamName: clean(row["チーム名"]),
+        tier: tierValue(row["階級"]),
+        role: clean(row["ロール"]).toUpperCase(),
+        matchId: clean(row["関連試合ID"]),
+        tags: clean(row["タグ"]),
+        comment: clean(row["コメント"])
+      };
+    })
+    .filter((item) => item.clipId && item.url)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+function buildSiteNews(rows, teamRows, lookup) {
+  return rows
+    .map((row) => {
+      const createdAt = dateTimeValue(row.created_at || row["作成日時"], "");
+      const newsDate = dateValue(row.news_date || row["日付"] || row.created_at || row["作成日時"]);
+      const team = clean(row.team || row["チーム"]);
+      return {
+        id: clean(row.news_id),
+        createdAt,
+        newsDate,
+        category: clean(row.category || row["カテゴリ"]),
+        title: clean(row.title || row["タイトル"] || row["表示文"]),
+        body: clean(row.body || row["本文"]),
+        scheduleId: clean(row.related_schedule_id || row.schedule_id),
+        matchId: clean(row.related_match_id || row["試合ID"]),
+        tier: tierValue(row.tier || row["階級"]),
+        team: resolveTeam(team, teamRows, lookup) || team,
+        published: newsPublishedValue(row.is_published || row["公開"]),
+        priority: numberValue(row.priority || row["優先度"])
+      };
+    })
+    .filter((item) => item.title)
+    .filter((item) => item.published !== false)
+    .sort((a, b) => {
+      const left = new Date(a.createdAt || a.newsDate || 0).getTime();
+      const right = new Date(b.createdAt || b.newsDate || 0).getTime();
+      if (left !== right) return right - left;
+      return (b.priority || 0) - (a.priority || 0);
+    });
+}
+
+function newsPublishedValue(value) {
+  const raw = clean(value);
+  if (!raw) return true;
+  const normalized = raw.normalize("NFKC").toUpperCase();
+  return !["FALSE", "0", "NO", "OFF", "非公開"].includes(normalized);
 }
 
 function buildTeamLookup(rows) {

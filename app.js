@@ -1,12 +1,26 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-03";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-04";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
 const CLIP_WATCHED_STORAGE_KEY = "ltkdb.watchedClipIds.v1";
+const TWITCH_CLIP_LIKED_STORAGE_KEY = "ltkdb.likedTwitchClipIds.v1";
+const TWITCH_CLIP_VIEWER_ID_STORAGE_KEY = "ltkdb.twitchClipViewerId.v1";
+const CLIP_WARNING_STORAGE_KEY = "ltk_clip_warning_accepted";
+const CLIP_WARNING_ACCEPTED_VALUE = "v2";
+const CLIP_WARNING_TEAM_STORAGE_KEY = "ltk_clip_warning_team";
+const CLIP_WARNING_TEAM_OPTIONS = ["DD", "CC", "IT", "LR"];
+const CLIP_WARNING_TEAM_LABELS = {
+  DD: "Dahlia Diadem",
+  CC: "Camellia Crown",
+  IT: "Iris Tiara",
+  LR: "Laurel Regalia"
+};
 const CLIP_RECENT_DAYS = 7;
 const CLIP_PAGE_SIZE = 24;
-const CLIPS_PREVIEW_ENABLED = ["localhost", "127.0.0.1"].includes(window.location.hostname)
-  || new URLSearchParams(window.location.search).get("preview") === "clips";
+const TWITCH_CLIP_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScMV6ErnMTeMzfvV1bE8-L5MDz4hMCiXM33MTqfPmPXSkSUHg/viewform";
+const TWITCH_CLIP_LIKE_ENDPOINT = "https://script.google.com/macros/s/AKfycbwNzByFJex1ZVj7mKFrMnGfYDrRSK_6Ew1j5A-S6hQymMs8a7Emx1_wqWGPObNCe_0/exec";
+const CLIPS_PREVIEW_ENABLED = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const FULL_CALENDAR_COLLAPSED_EVENT_LIMIT = 2;
 const ROLE_ORDER = ["TOP", "JG", "MID", "ADC", "SUP"];
 const DRAFT_SLOTS = {
   BLUE: {
@@ -28,7 +42,10 @@ let scrimResults = [];
 let teams = {};
 let liveStreams = [];
 let clipVideos = [];
+let twitchClips = [];
+let siteNews = [];
 let watchedClipIds = readWatchedClipIds();
+let likedTwitchClipIds = readLikedTwitchClipIds();
 let liveTimer = null;
 let dataTimer = null;
 let dialogBackStack = [];
@@ -38,7 +55,7 @@ const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
 const state = {
   view: "calendar",
   calendarMode: window.matchMedia("(max-width: 760px)").matches ? "cards" : "full",
-  filterOpen: false,
+  filterOpen: true,
   type: "",
   tier: "",
   team: "",
@@ -46,11 +63,19 @@ const state = {
   excludeScrims: true,
   excludeViewer: false,
   lastUpdatedAt: null,
+  fullCalendarExpanded: false,
+  fullCalendarExpandedDate: "",
   fullCalendar: null,
   playerStatsSort: { key: "kda", direction: "desc" },
   championStatsSort: { key: "presence", direction: "desc" },
   championTableOpen: true,
-  clipPage: 1
+  clipSource: "youtube",
+  clipPage: 1,
+  twitchClipPage: 1,
+  twitchClipPlayer: "",
+  twitchClipSort: "new",
+  clipViewerTeam: readClipViewerTeam(),
+  previousView: "calendar"
 };
 
 const elements = {
@@ -66,12 +91,23 @@ const elements = {
   clipsGrid: document.querySelector("#clipsGrid"),
   clipsPagination: document.querySelector("#clipsPagination"),
   clipsStatus: document.querySelector("#clipsStatus"),
+  clipTeamNotice: document.querySelector("#clipTeamNotice"),
+  clipTeamNoticeLabel: document.querySelector("[data-clip-team-label]"),
+  changeClipTeam: document.querySelector("[data-change-clip-team]"),
+  clipWarningModal: null,
+  clipSourceTabs: document.querySelectorAll("[data-clip-source]"),
+  twitchClipIntro: document.querySelector("#twitchClipIntro"),
+  twitchClipFormLink: document.querySelector("#twitchClipFormLink"),
+  twitchClipFilters: document.querySelector("#twitchClipFilters"),
+  twitchClipPlayerFilter: document.querySelector("#twitchClipPlayerFilter"),
+  twitchClipSortFilter: document.querySelector("#twitchClipSortFilter"),
   filterPanel: document.querySelector("#filterPanel"),
   filterToggle: document.querySelector("#filterToggle"),
   headerStatus: document.querySelector("#headerStatus"),
   liveNowPanel: document.querySelector(".live-now-panel"),
   liveNowList: document.querySelector("#liveNowList"),
   liveNowStatus: document.querySelector("#liveNowStatus"),
+  newsList: document.querySelector("#newsList"),
   typeFilter: document.querySelector("#typeFilter"),
   tierFilter: document.querySelector("#tierFilter"),
   teamFilter: document.querySelector("#teamFilter"),
@@ -147,10 +183,6 @@ function setupHeaderEnhancements() {
 
 function moveFilterPanel() {
   const toolbar = document.querySelector(".toolbar");
-  const navStack = document.querySelector(".nav-stack");
-  if (elements.filterPanel && navStack && elements.filterPanel.parentElement !== navStack) {
-    navStack.append(elements.filterPanel);
-  }
   if (toolbar && elements.filterPanel && toolbar.parentElement !== elements.filterPanel) {
     elements.filterPanel.append(toolbar);
   }
@@ -206,6 +238,8 @@ function applyData(data) {
   scrimResults = data.scrimResults || [];
   teams = data.teams || {};
   clipVideos = data.clipVideos || [];
+  twitchClips = data.twitchClips || [];
+  siteNews = data.siteNews || [];
   populateTeamFilter();
 }
 
@@ -261,16 +295,23 @@ function bindEvents() {
   document.addEventListener("click", handleGlobalAnalyticsClick);
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => {
-      state.view = button.dataset.view;
-      if (state.view === "clips" && !CLIPS_PREVIEW_ENABLED) state.view = "calendar";
-      document.querySelectorAll(".tab-button").forEach((item) => item.classList.toggle("is-active", item === button));
-      document.querySelectorAll(".view").forEach((view) => view.classList.toggle("is-active", view.id === `${state.view}View`));
+      const requestedView = button.dataset.view || "calendar";
+      if (requestedView === "clips" && !CLIPS_PREVIEW_ENABLED) {
+        switchView("calendar");
+        return;
+      }
+      if (requestedView === "clips" && !hasAcceptedClipWarning()) {
+        state.previousView = state.view && state.view !== "clips" ? state.view : state.previousView || "calendar";
+        showClipWarningModal();
+        trackAnalyticsEvent("clip_warning_view", { page: "clips" });
+        return;
+      }
+      switchView(requestedView);
       trackAnalyticsEvent("select_content", {
         content_type: "navigation_tab",
         item_id: state.view,
         item_name: button.textContent.trim()
       });
-      render();
     });
   });
 
@@ -289,6 +330,54 @@ function bindEvents() {
     state.championTableOpen = !state.championTableOpen;
     applyChampionTableState();
   });
+  elements.clipSourceTabs?.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clipSource = button.dataset.clipSource || "youtube";
+      state.clipPage = 1;
+      state.twitchClipPage = 1;
+      trackAnalyticsEvent(state.clipSource === "twitch" ? "twitch_clip_page_view" : "clip_filter_click", {
+        filter_name: "clip_source",
+        filter_value: state.clipSource,
+        view: "clips"
+      });
+      renderClips();
+    });
+  });
+  elements.twitchClipPlayerFilter?.addEventListener("input", () => {
+    state.twitchClipPlayer = elements.twitchClipPlayerFilter.value.trim().toLocaleLowerCase("ja");
+    state.twitchClipPage = 1;
+    trackAnalyticsEvent("twitch_clip_filter_click", {
+      filter_type: "player",
+      filter_value: state.twitchClipPlayer ? "filled" : "empty"
+    });
+    renderClips();
+  });
+  elements.twitchClipSortFilter?.addEventListener("change", () => {
+    state.twitchClipSort = elements.twitchClipSortFilter.value || "new";
+    state.twitchClipPage = 1;
+    trackAnalyticsEvent("twitch_clip_filter_click", {
+      filter_type: "sort",
+      filter_value: state.twitchClipSort
+    });
+    renderClips();
+  });
+  elements.twitchClipFormLink?.addEventListener("click", (event) => {
+    if (!TWITCH_CLIP_FORM_URL) {
+      event.preventDefault();
+      return;
+    }
+    trackAnalyticsEvent("twitch_clip_submit_form_click", {
+      link_label: "Google Form"
+    });
+  });
+  elements.changeClipTeam?.addEventListener("click", () => {
+    showClipWarningModal({ showTeams: true, stayOnBack: true });
+    trackAnalyticsEvent("clip_team_filter_click", {
+      filter_name: "clip_viewer_team_change",
+      filter_value: state.clipViewerTeam || "all",
+      view: "clips"
+    });
+  });
 
   elements.typeFilter.addEventListener("change", () => {
     state.type = elements.typeFilter.value;
@@ -303,6 +392,7 @@ function bindEvents() {
   elements.teamFilter?.addEventListener("change", () => {
     state.team = elements.teamFilter.value;
     if (state.view === "clips") state.clipPage = 1;
+    if (state.view === "clips") state.twitchClipPage = 1;
     trackAnalyticsEvent(state.view === "clips" ? "clip_team_filter_click" : "filter_change", {
       filter_name: "team",
       filter_value: state.team || "all",
@@ -314,6 +404,12 @@ function bindEvents() {
         filter_value: state.team || "all",
         view: state.view
       });
+      if (state.clipSource === "twitch") {
+        trackAnalyticsEvent("twitch_clip_filter_click", {
+          filter_type: "team",
+          filter_value: state.team || "all"
+        });
+      }
     }
     render();
   });
@@ -353,6 +449,156 @@ function bindEvents() {
   narrowLayoutQuery.addEventListener("change", applyFilterPanelState);
 }
 
+function switchView(viewName) {
+  const nextView = viewName || "calendar";
+  if (state.view && state.view !== "clips" && nextView !== "clips") {
+    state.previousView = state.view;
+  }
+  if (state.view && state.view !== "clips" && nextView === "clips") {
+    state.previousView = state.view;
+  }
+  state.view = nextView;
+  document.querySelectorAll(".tab-button").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.view === state.view);
+  });
+  document.querySelectorAll(".view").forEach((view) => {
+    view.classList.toggle("is-active", view.id === `${state.view}View`);
+  });
+  render();
+}
+
+function hasAcceptedClipWarning() {
+  try {
+    return window.localStorage?.getItem(CLIP_WARNING_STORAGE_KEY) === CLIP_WARNING_ACCEPTED_VALUE;
+  } catch {
+    return false;
+  }
+}
+
+function readClipViewerTeam() {
+  try {
+    const teamKey = window.localStorage?.getItem(CLIP_WARNING_TEAM_STORAGE_KEY) || "";
+    return CLIP_WARNING_TEAM_OPTIONS.includes(teamKey) ? teamKey : "";
+  } catch {
+    return "";
+  }
+}
+
+function activeClipTeamFilter() {
+  return state.clipViewerTeam || state.team;
+}
+
+function clipWarningTeamName(teamKey) {
+  return teams[teamKey]?.fullName || CLIP_WARNING_TEAM_LABELS[teamKey] || teamKey;
+}
+
+function clipWarningTeamMark(teamKey) {
+  return teams[teamKey]?.logo
+    ? teamLogo(teamKey, "clip-warning-team-logo")
+    : `<span class="clip-warning-team-fallback">${teamKey}</span>`;
+}
+
+function acceptClipWarning(teamKey = "") {
+  const selectedTeam = CLIP_WARNING_TEAM_OPTIONS.includes(teamKey) ? teamKey : "";
+  try {
+    window.localStorage?.setItem(CLIP_WARNING_STORAGE_KEY, CLIP_WARNING_ACCEPTED_VALUE);
+    if (selectedTeam) {
+      window.localStorage?.setItem(CLIP_WARNING_TEAM_STORAGE_KEY, selectedTeam);
+    } else {
+      window.localStorage?.removeItem(CLIP_WARNING_TEAM_STORAGE_KEY);
+    }
+  } catch {
+    // localStorageが使えない環境でも閲覧自体は許可する。
+  }
+  state.clipViewerTeam = selectedTeam;
+  state.clipPage = 1;
+  state.twitchClipPage = 1;
+  closeClipWarningModal();
+  switchView("clips");
+  trackAnalyticsEvent("clip_warning_accept", {
+    page: "clips",
+    viewer_team: selectedTeam || "all"
+  });
+}
+
+function backFromClipWarning() {
+  const stayOnBack = elements.clipWarningModal?.dataset.stayOnBack === "true";
+  closeClipWarningModal();
+  if (stayOnBack) return;
+  switchView(state.previousView || "calendar");
+  trackAnalyticsEvent("clip_warning_back", { page: "clips" });
+}
+
+function setupClipWarningModal() {
+  if (elements.clipWarningModal) return;
+  const modal = document.createElement("div");
+  modal.className = "clip-warning-modal-backdrop";
+  modal.hidden = true;
+  modal.innerHTML = `
+    <section class="clip-warning-modal" role="dialog" aria-modal="true" aria-labelledby="clipWarningTitle">
+      <div class="clip-warning-accent" aria-hidden="true">!</div>
+      <h2 id="clipWarningTitle" class="clip-warning-modal-title">閲覧前のご注意</h2>
+      <p class="clip-warning-modal-text">このページにはLTK関連の切り抜き動画・クリップが含まれます。
+
+LTK参加メンバー・コーチ・関係者の方は、スクリム情報の取得につながる可能性があるため閲覧をお控えください。
+
+一般視聴者の方のみ、内容を確認のうえ閲覧してください。
+自分のチームを選択すると、そのチームに関係する切り抜き動画とクリップだけを表示します。</p>
+      <div class="clip-warning-team-picker" hidden data-clip-warning-teams>
+        ${CLIP_WARNING_TEAM_OPTIONS.map((teamKey) => `
+          <button class="clip-warning-team-button" type="button" data-clip-warning-team="${teamKey}">
+            <span>${clipWarningTeamMark(teamKey)}</span>
+            <strong>${clipWarningTeamName(teamKey)}</strong>
+            <small>${teamShortName(teamKey)}</small>
+          </button>
+        `).join("")}
+      </div>
+      <div class="clip-warning-modal-actions">
+        <button class="clip-warning-back-button" type="button" data-clip-warning-back>戻る</button>
+        <button class="clip-warning-team-toggle-button" type="button" data-clip-warning-team-toggle>自分のチームを選択してみる</button>
+        <button class="clip-warning-accept-button" type="button" data-clip-warning-accept>一般視聴者として閲覧する</button>
+      </div>
+    </section>
+  `;
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) backFromClipWarning();
+  });
+  modal.querySelector("[data-clip-warning-accept]")?.addEventListener("click", () => acceptClipWarning(""));
+  modal.querySelector("[data-clip-warning-team-toggle]")?.addEventListener("click", () => {
+    const picker = modal.querySelector("[data-clip-warning-teams]");
+    if (!picker) return;
+    picker.hidden = !picker.hidden;
+    trackAnalyticsEvent("clip_warning_team_picker", { page: "clips" });
+  });
+  modal.querySelectorAll("[data-clip-warning-team]").forEach((button) => {
+    button.addEventListener("click", () => acceptClipWarning(button.dataset.clipWarningTeam || ""));
+  });
+  modal.querySelector("[data-clip-warning-back]")?.addEventListener("click", backFromClipWarning);
+  document.addEventListener("keydown", (event) => {
+    if (!modal.hidden && event.key === "Escape") backFromClipWarning();
+  });
+  document.body.append(modal);
+  elements.clipWarningModal = modal;
+}
+
+function showClipWarningModal(options = {}) {
+  if (!elements.clipWarningModal) setupClipWarningModal();
+  const picker = elements.clipWarningModal.querySelector("[data-clip-warning-teams]");
+  if (picker) picker.hidden = !options.showTeams;
+  elements.clipWarningModal.dataset.stayOnBack = options.stayOnBack ? "true" : "false";
+  elements.clipWarningModal.hidden = false;
+  const focusTarget = options.showTeams
+    ? elements.clipWarningModal.querySelector("[data-clip-warning-team]")
+    : elements.clipWarningModal.querySelector("[data-clip-warning-accept]");
+  focusTarget?.focus();
+}
+
+function closeClipWarningModal() {
+  if (!elements.clipWarningModal) return;
+  elements.clipWarningModal.hidden = true;
+  elements.clipWarningModal.dataset.stayOnBack = "false";
+}
+
 function applyFeatureFlags() {
   if (CLIPS_PREVIEW_ENABLED) return;
   document.querySelectorAll('[data-view="clips"]').forEach((element) => element.remove());
@@ -363,6 +609,7 @@ function applyFeatureFlags() {
 function render() {
   renderHeaderStatus();
   renderLiveNow();
+  renderNews();
   if (state.view === "calendar") renderCalendar();
   if (state.view === "league") renderLeagueTables();
   if (state.view === "teams") renderTeamStats();
@@ -370,6 +617,27 @@ function render() {
   if (state.view === "ranking") renderRankings();
   if (state.view === "champions") renderChampions();
   if (state.view === "clips") renderClips();
+}
+
+function renderNews() {
+  if (!elements.newsList) return;
+  const rows = siteNews
+    .filter((item) => item.published !== false)
+    .slice(0, 5);
+  if (!rows.length) {
+    elements.newsList.innerHTML = `<p class="news-empty">更新情報はまだありません</p>`;
+    return;
+  }
+  elements.newsList.innerHTML = rows.map((item) => `
+    <article class="news-item">
+      <div class="news-item-head">
+        <span>${escapeAttr(shortNewsDate(item.newsDate || item.createdAt))}</span>
+        ${item.category ? `<span class="news-item-category">${escapeAttr(item.category)}</span>` : ""}
+      </div>
+      <p class="news-item-title">${escapeAttr(item.title || "更新しました")}</p>
+      ${item.body ? `<p class="news-item-body">${escapeAttr(item.body)}</p>` : ""}
+    </article>
+  `).join("");
 }
 
 function markUpdated() {
@@ -386,9 +654,33 @@ function renderHeaderStatus() {
 }
 
 function renderClips() {
+  renderClipTeamNotice();
+  applyClipSourceState();
+  if (state.clipSource === "twitch") {
+    renderTwitchClips();
+    return;
+  }
+  renderYouTubeClips();
+}
+
+function renderClipTeamNotice() {
+  if (!elements.clipTeamNotice || !elements.clipTeamNoticeLabel) return;
+  if (!hasAcceptedClipWarning()) {
+    elements.clipTeamNotice.hidden = true;
+    return;
+  }
+  const teamKey = state.clipViewerTeam;
+  elements.clipTeamNotice.hidden = false;
+  elements.clipTeamNoticeLabel.innerHTML = teamKey
+    ? `${teamLogo(teamKey, "clip-team-notice-logo")}<span>${teamFullName(teamKey)}だけ表示中</span>`
+    : "全チーム表示中";
+}
+
+function renderYouTubeClips() {
   if (!elements.clipsGrid) return;
+  const teamFilter = activeClipTeamFilter();
   const allFilteredRows = clipVideos
-    .filter((item) => !state.team || item.teamKey === state.team)
+    .filter((item) => !teamFilter || item.teamKey === teamFilter)
     .filter((item) => !state.tier || item.tier === state.tier)
     .filter((item) => filterByKeyword([item], (video) => `${video.title} ${video.memberName} ${video.channelTitle} ${teamFullName(video.teamKey)} ${video.tier} ${video.role}`)[0])
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
@@ -482,6 +774,185 @@ function renderClips() {
   renderClipPagination(rows.length, totalPages);
 }
 
+function renderTwitchClips() {
+  if (!elements.clipsGrid) return;
+  const teamFilter = activeClipTeamFilter();
+  const filteredRows = twitchClips
+    .filter((item) => !teamFilter || item.teamKey === teamFilter)
+    .filter((item) => !state.tier || item.tier === state.tier)
+    .filter((item) => !state.twitchClipPlayer || item.relatedPlayerName.toLocaleLowerCase("ja").includes(state.twitchClipPlayer))
+    .filter((item) => filterByKeyword([item], (clip) => `${clip.title} ${clip.broadcasterName} ${clip.creatorName} ${clip.relatedPlayerName} ${teamFullName(clip.teamKey)} ${clip.tier} ${clip.role} ${clip.comment}`)[0]);
+  const rows = filteredRows.sort((a, b) => {
+    if (state.twitchClipSort === "likes") return twitchClipLikeCount(b) - twitchClipLikeCount(a);
+    if (state.twitchClipSort === "views") return (b.viewCount || 0) - (a.viewCount || 0);
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+  const totalPages = Math.max(1, Math.ceil(rows.length / CLIP_PAGE_SIZE));
+  if (state.twitchClipPage > totalPages) state.twitchClipPage = totalPages;
+  if (state.twitchClipPage < 1) state.twitchClipPage = 1;
+  const pageRows = rows.slice((state.twitchClipPage - 1) * CLIP_PAGE_SIZE, state.twitchClipPage * CLIP_PAGE_SIZE);
+
+  if (elements.clipsStatus) {
+    elements.clipsStatus.textContent = rows.length
+      ? `掲載OKのTwitchクリップ ${rows.length}件 / ${state.twitchClipPage}ページ目`
+      : "条件に一致するTwitchクリップがありません";
+  }
+
+  if (!rows.length) {
+    elements.clipsGrid.innerHTML = `<p class="empty-state">表示できるTwitchクリップがありません。</p>`;
+    renderClipPagination(0, 0);
+    return;
+  }
+
+  elements.clipsGrid.innerHTML = `<div class="clip-date-grid">${pageRows.map((clip) => {
+    const { date } = formatClipDateParts(clip.createdAt);
+    return twitchClipCardHtml(clip, date || "作成日不明");
+  }).join("")}</div>`;
+
+  elements.clipsGrid.querySelectorAll(".twitch-clip-link").forEach((link) => {
+    link.addEventListener("click", () => {
+      const clip = twitchClips.find((item) => item.clipId === link.dataset.clipId);
+      trackAnalyticsEvent("twitch_clip_click", {
+        clip_id: clip?.clipId || link.dataset.clipId || "",
+        clip_title: clip?.title || "",
+        broadcaster_name: clip?.broadcasterName || "",
+        creator_name: clip?.creatorName || "",
+        related_player_name: clip?.relatedPlayerName || "",
+        destination_url: clip?.url || link.href || ""
+      });
+    });
+  });
+  elements.clipsGrid.querySelectorAll("[data-twitch-like]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toggleTwitchClipLike(button.dataset.twitchLike || "");
+      renderTwitchClips();
+    });
+  });
+  renderClipPagination(rows.length, totalPages);
+}
+
+function twitchClipCardHtml(clip, dateLabel) {
+  const { time } = formatClipDateParts(clip.createdAt);
+  const teamKey = clip.teamKey || "";
+  const teamAccent = teams[teamKey]?.accent || "#9146ff";
+  const liked = likedTwitchClipIds.has(clip.clipId);
+  const likeCount = twitchClipLikeCount(clip);
+  const thumbnail = clip.thumbnailUrl
+    ? `<img src="${escapeAttr(clip.thumbnailUrl)}" alt="">`
+    : `<div class="twitch-placeholder"><strong>Twitch Clip</strong><small>${clip.broadcasterName || "Twitch"}</small></div>`;
+  return `
+    <article class="clip-card twitch-clip-card" style="--team:${teamAccent}">
+      <a class="clip-thumb twitch-clip-link" href="${escapeAttr(clip.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clip.clipId)}">
+        ${thumbnail}
+        <span class="clip-platform-badge">Twitch Clip</span>
+      </a>
+      <div class="clip-card-body">
+        <h3><a class="twitch-clip-link" href="${escapeAttr(clip.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clip.clipId)}">${clip.title}</a></h3>
+        <div class="clip-member-row">
+          ${clip.relatedPlayerName ? playerIcon(clip.relatedPlayerName) : `<span class="ranking-avatar">T</span>`}
+          <div>
+            <strong>${clip.relatedPlayerName || "関連選手未設定"}</strong>
+            <small>${teamLogo(teamKey, "ranking-team-logo")}${teamShortName(teamKey)} / ${clip.tier || "-"} / ${clip.role || "-"}</small>
+          </div>
+        </div>
+        <div class="clip-service-meta">
+          <span>作成者：${clip.creatorName || "-"}</span>
+          <span>再生数：${formatInteger(clip.viewCount || 0)}</span>
+        </div>
+        <button class="twitch-like-button${liked ? " is-liked" : ""}" type="button" data-twitch-like="${escapeAttr(clip.clipId)}" aria-pressed="${liked ? "true" : "false"}">
+          <span>${liked ? "いいね済み" : "いいね"}</span>
+          <strong>${formatInteger(likeCount)}</strong>
+        </button>
+        ${clip.comment ? `<p class="clip-comment">${clip.comment}</p>` : ""}
+        <div class="clip-meta-row">
+          <span>投稿日 ${dateLabel}</span>
+          <span>投稿時間 ${time || "--:--"}</span>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function twitchClipLikeCount(clip) {
+  return Number(clip?.likeCount || 0);
+}
+
+function readLikedTwitchClipIds() {
+  try {
+    return new Set(JSON.parse(window.localStorage?.getItem(TWITCH_CLIP_LIKED_STORAGE_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function toggleTwitchClipLike(clipId) {
+  if (!clipId) return;
+  const liked = likedTwitchClipIds.has(clipId);
+  if (liked) likedTwitchClipIds.delete(clipId);
+  else likedTwitchClipIds.add(clipId);
+  try {
+    window.localStorage?.setItem(TWITCH_CLIP_LIKED_STORAGE_KEY, JSON.stringify([...likedTwitchClipIds]));
+  } catch {
+    // localStorageが使えない環境では画面上の状態だけ更新する。
+  }
+  const clip = twitchClips.find((item) => item.clipId === clipId);
+  sendTwitchClipLike(clipId, !liked);
+  trackAnalyticsEvent(liked ? "twitch_clip_unlike" : "twitch_clip_like", {
+    clip_id: clipId,
+    clip_title: clip?.title || "",
+    related_player_name: clip?.relatedPlayerName || ""
+  });
+}
+
+function twitchClipViewerId() {
+  try {
+    const existing = window.localStorage?.getItem(TWITCH_CLIP_VIEWER_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const generated = `viewer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+    window.localStorage?.setItem(TWITCH_CLIP_VIEWER_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return `viewer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+}
+
+function sendTwitchClipLike(clipId, liked) {
+  if (!TWITCH_CLIP_LIKE_ENDPOINT || !clipId) return;
+  const formData = new FormData();
+  formData.append("action", "twitch_clip_like");
+  formData.append("clip_id", clipId);
+  formData.append("viewer_id", twitchClipViewerId());
+  formData.append("liked", liked ? "true" : "false");
+  try {
+    if (navigator.sendBeacon && navigator.sendBeacon(TWITCH_CLIP_LIKE_ENDPOINT, formData)) return;
+  } catch {
+    // sendBeacon不可の場合はfetchへフォールバックする。
+  }
+  fetch(TWITCH_CLIP_LIKE_ENDPOINT, {
+    method: "POST",
+    mode: "no-cors",
+    body: formData,
+    keepalive: true
+  }).catch((error) => {
+    console.warn("Twitch clip like update failed.", error);
+  });
+}
+
+function applyClipSourceState() {
+  elements.clipSourceTabs?.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.clipSource === state.clipSource);
+  });
+  const isTwitch = state.clipSource === "twitch";
+  if (elements.twitchClipIntro) elements.twitchClipIntro.hidden = !isTwitch;
+  if (elements.twitchClipFilters) elements.twitchClipFilters.hidden = !isTwitch;
+  if (elements.twitchClipFormLink) {
+    elements.twitchClipFormLink.href = TWITCH_CLIP_FORM_URL || "#";
+    elements.twitchClipFormLink.setAttribute("aria-disabled", TWITCH_CLIP_FORM_URL ? "false" : "true");
+    elements.twitchClipFormLink.classList.toggle("is-disabled", !TWITCH_CLIP_FORM_URL);
+    elements.twitchClipFormLink.textContent = TWITCH_CLIP_FORM_URL ? "クリップを投稿する" : "投稿フォーム未設定";
+  }
+}
+
 function renderClipPagination(totalRows, totalPages) {
   if (!elements.clipsPagination) return;
   if (!totalRows || totalPages <= 1) {
@@ -489,23 +960,33 @@ function renderClipPagination(totalRows, totalPages) {
     return;
   }
   elements.clipsPagination.innerHTML = `
-    <button type="button" class="clip-page-button" data-clip-page="${state.clipPage - 1}" ${state.clipPage <= 1 ? "disabled" : ""}>前へ</button>
-    <span>${state.clipPage} / ${totalPages}</span>
-    <button type="button" class="clip-page-button" data-clip-page="${state.clipPage + 1}" ${state.clipPage >= totalPages ? "disabled" : ""}>次へ</button>
+    <button type="button" class="clip-page-button" data-clip-page="${currentClipPage() - 1}" ${currentClipPage() <= 1 ? "disabled" : ""}>前へ</button>
+    <span>${currentClipPage()} / ${totalPages}</span>
+    <button type="button" class="clip-page-button" data-clip-page="${currentClipPage() + 1}" ${currentClipPage() >= totalPages ? "disabled" : ""}>次へ</button>
   `;
   elements.clipsPagination.querySelectorAll("[data-clip-page]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextPage = Number(button.dataset.clipPage);
       if (!Number.isFinite(nextPage)) return;
-      state.clipPage = Math.max(1, Math.min(totalPages, nextPage));
-      trackAnalyticsEvent("clip_filter_click", {
+      setCurrentClipPage(Math.max(1, Math.min(totalPages, nextPage)));
+      trackAnalyticsEvent(state.clipSource === "twitch" ? "twitch_clip_filter_click" : "clip_filter_click", {
         filter_name: "pagination",
-        filter_value: String(state.clipPage),
+        filter_type: "pagination",
+        filter_value: String(currentClipPage()),
         view: "clips"
       });
       renderClips();
     });
   });
+}
+
+function currentClipPage() {
+  return state.clipSource === "twitch" ? state.twitchClipPage : state.clipPage;
+}
+
+function setCurrentClipPage(value) {
+  if (state.clipSource === "twitch") state.twitchClipPage = value;
+  else state.clipPage = value;
 }
 
 function isRecentClip(video) {
@@ -523,6 +1004,7 @@ function trackFilterChange(filterName, filterValue) {
     view: state.view
   });
   if (state.view === "clips") state.clipPage = 1;
+  if (state.view === "clips") state.twitchClipPage = 1;
 }
 
 function readWatchedClipIds() {
@@ -783,13 +1265,41 @@ function renderFullCalendar(items) {
       initialDate: "2026-05-01",
       height: "auto",
       fixedWeekCount: false,
-      dayMaxEvents: 2,
+      dayMaxEvents: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
+      dayMaxEventRows: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
+      moreLinkClick(info) {
+        state.fullCalendarExpanded = true;
+        state.fullCalendarExpandedDate = dateKey(info.date);
+        elements.fullCalendar.classList.add("is-single-day-expanded");
+        state.fullCalendar.setOption("dayMaxEvents", false);
+        state.fullCalendar.setOption("dayMaxEventRows", false);
+        requestAnimationFrame(() => state.fullCalendar.updateSize());
+        return false;
+      },
       displayEventTime: false,
       eventOrder: "sortOrder",
       headerToolbar: { left: "prev,next today", center: "title", right: "" },
       buttonText: { today: "今日" },
       dayCellClassNames(info) {
-        return dateKey(info.date) === japanDateKey() ? ["is-ltk-today"] : [];
+        const key = dateKey(info.date);
+        return [
+          key === japanDateKey() ? "is-ltk-today" : "",
+          key === state.fullCalendarExpandedDate ? "is-ltk-expanded-day" : ""
+        ].filter(Boolean);
+      },
+      dayCellDidMount(info) {
+        const key = dateKey(info.date);
+        if (key !== state.fullCalendarExpandedDate) return;
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "fc-day-expand-close";
+        closeButton.textContent = "閉じる";
+        closeButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          collapseFullCalendarDay();
+        });
+        info.el.querySelector(".fc-daygrid-day-top")?.append(closeButton);
       },
       eventContent(info) {
         return { domNodes: [calendarEventNode(info.event.extendedProps.item)] };
@@ -810,6 +1320,16 @@ function renderFullCalendar(items) {
     state.calendarMode = "cards";
     applyCalendarMode();
   }
+}
+
+function collapseFullCalendarDay() {
+  state.fullCalendarExpanded = false;
+  state.fullCalendarExpandedDate = "";
+  elements.fullCalendar.classList.remove("is-single-day-expanded");
+  if (!state.fullCalendar) return;
+  state.fullCalendar.setOption("dayMaxEvents", FULL_CALENDAR_COLLAPSED_EVENT_LIMIT);
+  state.fullCalendar.setOption("dayMaxEventRows", FULL_CALENDAR_COLLAPSED_EVENT_LIMIT);
+  requestAnimationFrame(() => state.fullCalendar.updateSize());
 }
 
 function calendarEventNode(item) {
@@ -1168,8 +1688,13 @@ function bpFlowTeamRow(result, rows, teamKey) {
 function draftActionsForTeam(result, rows, teamKey) {
   const side = draftSideForTeam(result, teamKey);
   const slots = DRAFT_SLOTS[side] || DRAFT_SLOTS.BLUE;
-  const sourceActions = bpRows
-    .filter((row) => row.matchId === result.id && row.team === teamKey)
+  let sourceActions = bpRows
+    .filter((row) => row.matchId === result.id && row.team === teamKey);
+  if (!sourceActions.length && side) {
+    sourceActions = bpRows
+      .filter((row) => row.matchId === result.id && row.side === side);
+  }
+  sourceActions = sourceActions
     .sort((a, b) => (a.bpOrder || 999) - (b.bpOrder || 999));
   const banActions = sourceActions.filter((row) => row.type === "BAN").map((row, index) => draftAction(row, row.bpOrder || slots.BAN[index] || index + 1, index));
   let pickActions = sourceActions.filter((row) => row.type === "PICK").map((row, index) => draftAction(row, row.bpOrder || slots.PICK[index] || index + 1, index));
@@ -3353,6 +3878,14 @@ function shortDate(dateValue) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function shortNewsDate(value) {
+  if (!value) return "";
+  const raw = String(value).trim().replace(/\//g, "-");
+  const date = new Date(raw.includes("T") ? raw : `${raw.split(" ")[0]}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 function formatClipDateParts(value) {
   if (!value) return { date: "", time: "" };
   const date = new Date(value);
@@ -3446,6 +3979,7 @@ function rateWithCount(numerator, denominator) {
   const rate = denominator ? numerator / denominator : 0;
   return `${percent(rate)} (${numerator}/${denominator || 0})`;
 }
+
 
 
 
