@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260521-04";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260602-02";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -32,6 +32,33 @@ const DRAFT_SLOTS = {
     PICK: [8, 9, 12, 17, 20]
   }
 };
+const ROUTES = [
+  { hash: "#/schedule", view: "calendar", pagePath: "/schedule", pageTitle: "予定" },
+  { hash: "#/standings", view: "league", pagePath: "/standings", pageTitle: "リーグ表" },
+  { hash: "#/teams", view: "teams", pagePath: "/teams", pageTitle: "チーム戦績" },
+  { hash: "#/players", view: "stats", pagePath: "/players", pageTitle: "個人成績" },
+  { hash: "#/rankings", view: "ranking", pagePath: "/rankings", pageTitle: "個人ランキング" },
+  { hash: "#/champions", view: "champions", pagePath: "/champions", pageTitle: "チャンピオン" },
+  { hash: "#/clips", view: "clips", clipSource: "youtube", pagePath: "/clips", pageTitle: "切り抜き動画" },
+  { hash: "#/clips/youtube", view: "clips", clipSource: "youtube", pagePath: "/clips/youtube", pageTitle: "YouTubeまとめ" },
+  { hash: "#/clips/twitch", view: "clips", clipSource: "twitch", pagePath: "/clips/twitch", pageTitle: "Twitchクリップまとめ" },
+  { hash: "#/about", view: "about", pagePath: "/about", pageTitle: "このサイトについて" },
+  { hash: "#/contact", view: "contact", pagePath: "/contact", pageTitle: "お問い合わせ" }
+];
+const DEFAULT_ROUTE = ROUTES[0];
+const routeByHash = new Map(ROUTES.map((route) => [route.hash, route]));
+const viewToRoute = new Map();
+ROUTES.forEach((route) => {
+  if (!viewToRoute.has(route.view)) viewToRoute.set(route.view, route);
+});
+const viewToHash = Object.fromEntries([...viewToRoute].map(([view, route]) => [view, route.hash]));
+const hashToView = Object.fromEntries(ROUTES.map((route) => [route.hash, route.view]));
+const viewToPageTitle = Object.fromEntries([...viewToRoute].map(([view, route]) => [view, route.pageTitle]));
+const viewToPagePath = Object.fromEntries([...viewToRoute].map(([view, route]) => [view, route.pagePath]));
+const clipSourceToHash = {
+  youtube: "#/clips/youtube",
+  twitch: "#/clips/twitch"
+};
 
 let bpRows = [];
 let championIcons = {};
@@ -50,6 +77,8 @@ let liveTimer = null;
 let dataTimer = null;
 let dialogBackStack = [];
 let currentDialogView = null;
+let lastTrackedPagePath = "";
+let currentRoute = DEFAULT_ROUTE;
 const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
 
 const state = {
@@ -127,6 +156,7 @@ const elements = {
 document.addEventListener("DOMContentLoaded", async () => {
   ensureAnalytics();
   applyFeatureFlags();
+  applyRouteFromHash({ render: false, trackPageView: false });
   setupHeaderEnhancements();
   moveFilterPanel();
   applyFilterPanelState();
@@ -138,6 +168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   startLiveRefresh();
   applyCalendarMode();
   render();
+  trackVirtualPageView(routeForState());
 });
 
 function setupHeaderEnhancements() {
@@ -293,11 +324,12 @@ function startDataRefresh() {
 
 function bindEvents() {
   document.addEventListener("click", handleGlobalAnalyticsClick);
+  window.addEventListener("hashchange", () => applyRouteFromHash());
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => {
       const requestedView = button.dataset.view || "calendar";
       if (requestedView === "clips" && !CLIPS_PREVIEW_ENABLED) {
-        switchView("calendar");
+        navigateToRoute(DEFAULT_ROUTE);
         return;
       }
       if (requestedView === "clips" && !hasAcceptedClipWarning()) {
@@ -306,10 +338,10 @@ function bindEvents() {
         trackAnalyticsEvent("clip_warning_view", { page: "clips" });
         return;
       }
-      switchView(requestedView);
+      navigateToRoute(viewToRoute.get(requestedView) || DEFAULT_ROUTE);
       trackAnalyticsEvent("select_content", {
         content_type: "navigation_tab",
-        item_id: state.view,
+        item_id: requestedView,
         item_name: button.textContent.trim()
       });
     });
@@ -332,15 +364,12 @@ function bindEvents() {
   });
   elements.clipSourceTabs?.forEach((button) => {
     button.addEventListener("click", () => {
-      state.clipSource = button.dataset.clipSource || "youtube";
-      state.clipPage = 1;
-      state.twitchClipPage = 1;
-      trackAnalyticsEvent(state.clipSource === "twitch" ? "twitch_clip_page_view" : "clip_filter_click", {
-        filter_name: "clip_source",
-        filter_value: state.clipSource,
-        view: "clips"
+      const nextSource = button.dataset.clipSource || "youtube";
+      navigateToRoute(routeByHash.get(clipSourceToHash[nextSource]) || routeByHash.get("#/clips"));
+      trackAnalyticsEvent("clip_source_tab_click", {
+        source: nextSource,
+        page: "clips"
       });
-      renderClips();
     });
   });
   elements.twitchClipPlayerFilter?.addEventListener("input", () => {
@@ -367,7 +396,8 @@ function bindEvents() {
       return;
     }
     trackAnalyticsEvent("twitch_clip_submit_form_click", {
-      link_label: "Google Form"
+      page: "clips",
+      source: "twitch"
     });
   });
   elements.changeClipTeam?.addEventListener("click", () => {
@@ -449,8 +479,11 @@ function bindEvents() {
   narrowLayoutQuery.addEventListener("change", applyFilterPanelState);
 }
 
-function switchView(viewName) {
-  const nextView = viewName || "calendar";
+function switchView(viewName, options = {}) {
+  const nextView = viewToRoute.has(viewName) ? viewName : DEFAULT_ROUTE.view;
+  const nextClipSource = nextView === "clips" ? options.clipSource || state.clipSource || "youtube" : state.clipSource;
+  const viewChanged = state.view !== nextView;
+  const clipSourceChanged = nextView === "clips" && state.clipSource !== nextClipSource;
   if (state.view && state.view !== "clips" && nextView !== "clips") {
     state.previousView = state.view;
   }
@@ -458,13 +491,92 @@ function switchView(viewName) {
     state.previousView = state.view;
   }
   state.view = nextView;
+  if (nextView === "clips") {
+    state.clipSource = nextClipSource;
+    if (clipSourceChanged) {
+      state.clipPage = 1;
+      state.twitchClipPage = 1;
+    }
+  }
   document.querySelectorAll(".tab-button").forEach((item) => {
     item.classList.toggle("is-active", item.dataset.view === state.view);
   });
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("is-active", view.id === `${state.view}View`);
   });
-  render();
+  if (options.render !== false) render();
+  if (options.trackPageView && (viewChanged || clipSourceChanged || options.forcePageView)) {
+    trackVirtualPageView(options.route || routeForState());
+  }
+}
+
+function normalizeHash(hashValue = window.location.hash) {
+  const rawHash = String(hashValue || "").trim();
+  if (!rawHash) return "";
+  const hashBody = (rawHash.startsWith("#") ? rawHash.slice(1) : rawHash).split("?")[0];
+  const path = hashBody.startsWith("/") ? hashBody : `/${hashBody}`;
+  return `#${path.replace(/\/+$/, "") || "/"}`;
+}
+
+function resolveRouteFromHash(hashValue = window.location.hash) {
+  const hash = normalizeHash(hashValue);
+  if (!hash) return { route: DEFAULT_ROUTE, invalid: false };
+  const route = routeByHash.get(hash);
+  if (route) {
+    if (route.view === "clips" && !CLIPS_PREVIEW_ENABLED) return { route: DEFAULT_ROUTE, invalid: true };
+    return { route, invalid: false };
+  }
+  if (hash.startsWith("#/clips/")) {
+    const fallbackRoute = CLIPS_PREVIEW_ENABLED ? routeByHash.get("#/clips") : DEFAULT_ROUTE;
+    return { route: fallbackRoute, invalid: true };
+  }
+  return { route: DEFAULT_ROUTE, invalid: true };
+}
+
+function applyRouteFromHash(options = {}) {
+  const resolved = resolveRouteFromHash();
+  if (resolved.invalid && window.location.hash !== resolved.route.hash) {
+    window.location.replace(resolved.route.hash);
+  }
+  currentRoute = resolved.route;
+  switchView(resolved.route.view, {
+    clipSource: resolved.route.clipSource,
+    render: options.render,
+    route: resolved.route,
+    trackPageView: options.trackPageView !== false
+  });
+}
+
+function navigateToRoute(route) {
+  const nextRoute = route || DEFAULT_ROUTE;
+  if (window.location.hash === nextRoute.hash) {
+    applyRouteFromHash();
+    return;
+  }
+  window.location.hash = nextRoute.hash;
+}
+
+function routeForState() {
+  if (
+    currentRoute?.view === state.view &&
+    (state.view !== "clips" || currentRoute.clipSource === state.clipSource)
+  ) {
+    return currentRoute;
+  }
+  if (state.view === "clips") {
+    return routeByHash.get(clipSourceToHash[state.clipSource]) || routeByHash.get("#/clips");
+  }
+  return viewToRoute.get(state.view) || DEFAULT_ROUTE;
+}
+
+function trackVirtualPageView(route) {
+  const nextRoute = route || routeForState();
+  if (!nextRoute || lastTrackedPagePath === nextRoute.pagePath) return;
+  lastTrackedPagePath = nextRoute.pagePath;
+  trackAnalyticsEvent("page_view", {
+    page_path: nextRoute.pagePath || viewToPagePath[nextRoute.view] || DEFAULT_ROUTE.pagePath,
+    page_title: nextRoute.pageTitle || viewToPageTitle[nextRoute.view] || DEFAULT_ROUTE.pageTitle
+  });
 }
 
 function hasAcceptedClipWarning() {
@@ -514,7 +626,7 @@ function acceptClipWarning(teamKey = "") {
   state.clipPage = 1;
   state.twitchClipPage = 1;
   closeClipWarningModal();
-  switchView("clips");
+  navigateToRoute(routeByHash.get("#/clips"));
   trackAnalyticsEvent("clip_warning_accept", {
     page: "clips",
     viewer_team: selectedTeam || "all"
@@ -525,7 +637,7 @@ function backFromClipWarning() {
   const stayOnBack = elements.clipWarningModal?.dataset.stayOnBack === "true";
   closeClipWarningModal();
   if (stayOnBack) return;
-  switchView(state.previousView || "calendar");
+  navigateToRoute(viewToRoute.get(state.previousView || "calendar") || DEFAULT_ROUTE);
   trackAnalyticsEvent("clip_warning_back", { page: "clips" });
 }
 
@@ -753,14 +865,13 @@ function renderYouTubeClips() {
     link.addEventListener("click", () => {
       markClipWatched(link.dataset.clipId);
       const video = clipVideos.find((item) => clipWatchKey(item) === link.dataset.clipId);
-      trackAnalyticsEvent("clip_video_click", {
+      trackAnalyticsEvent("youtube_clip_click", {
         video_id: video?.videoId || link.dataset.clipId || "",
         video_title: video?.title || "",
         player_name: video?.memberName || "",
-        team_key: video?.teamKey || "",
+        team_name: teamFullName(video?.teamKey),
         tier: video?.tier || "",
-        role: video?.role || "",
-        destination_url: video?.url || link.href || ""
+        role: video?.role || ""
       });
     });
   });
@@ -819,8 +930,10 @@ function renderTwitchClips() {
         clip_title: clip?.title || "",
         broadcaster_name: clip?.broadcasterName || "",
         creator_name: clip?.creatorName || "",
-        related_player_name: clip?.relatedPlayerName || "",
-        destination_url: clip?.url || link.href || ""
+        player_name: clip?.relatedPlayerName || "",
+        team_name: teamFullName(clip?.teamKey),
+        tier: clip?.tier || "",
+        role: clip?.role || ""
       });
     });
   });
