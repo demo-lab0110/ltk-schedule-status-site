@@ -1377,7 +1377,7 @@ function renderFullCalendar(items) {
       state.fullCalendar = new window.FullCalendar.Calendar(elements.fullCalendar, {
       locale: "ja",
       initialView: "dayGridMonth",
-      initialDate: "2026-05-01",
+      initialDate: japanDateKey(),
       height: "auto",
       fixedWeekCount: false,
       dayMaxEvents: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
