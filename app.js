@@ -3,6 +3,7 @@
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
 const CLIP_WATCHED_STORAGE_KEY = "ltkdb.watchedClipIds.v1";
+const TWITCH_CLIP_WATCHED_STORAGE_KEY = "ltkdb.watchedTwitchClipIds.v1";
 const TWITCH_CLIP_LIKED_STORAGE_KEY = "ltkdb.likedTwitchClipIds.v1";
 const TWITCH_CLIP_VIEWER_ID_STORAGE_KEY = "ltkdb.twitchClipViewerId.v1";
 const CLIP_WARNING_STORAGE_KEY = "ltk_clip_warning_accepted";
@@ -72,6 +73,7 @@ let clipVideos = [];
 let twitchClips = [];
 let siteNews = [];
 let watchedClipIds = readWatchedClipIds();
+let watchedTwitchClipIds = readWatchedTwitchClipIds();
 let likedTwitchClipIds = readLikedTwitchClipIds();
 let liveTimer = null;
 let dataTimer = null;
@@ -118,6 +120,7 @@ const elements = {
   championTable: document.querySelector("#championTable"),
   championTableToggle: document.querySelector("#championTableToggle"),
   clipsGrid: document.querySelector("#clipsGrid"),
+  clipsView: document.querySelector("#clipsView"),
   clipsPagination: document.querySelector("#clipsPagination"),
   clipsStatus: document.querySelector("#clipsStatus"),
   clipTeamNotice: document.querySelector("#clipTeamNotice"),
@@ -924,6 +927,7 @@ function renderTwitchClips() {
 
   elements.clipsGrid.querySelectorAll(".twitch-clip-link").forEach((link) => {
     link.addEventListener("click", () => {
+      markTwitchClipWatched(link.dataset.clipId);
       const clip = twitchClips.find((item) => item.clipId === link.dataset.clipId);
       trackAnalyticsEvent("twitch_clip_click", {
         clip_id: clip?.clipId || link.dataset.clipId || "",
@@ -951,15 +955,17 @@ function twitchClipCardHtml(clip, dateLabel) {
   const teamKey = clip.teamKey || "";
   const teamAccent = teams[teamKey]?.accent || "#9146ff";
   const liked = likedTwitchClipIds.has(clip.clipId);
+  const watched = watchedTwitchClipIds.has(clip.clipId);
   const likeCount = twitchClipLikeCount(clip);
   const thumbnail = clip.thumbnailUrl
     ? `<img src="${escapeAttr(clip.thumbnailUrl)}" alt="">`
     : `<div class="twitch-placeholder"><strong>Twitch Clip</strong><small>${clip.broadcasterName || "Twitch"}</small></div>`;
   return `
-    <article class="clip-card twitch-clip-card" style="--team:${teamAccent}">
+    <article class="clip-card twitch-clip-card${watched ? " is-watched" : ""}" data-twitch-clip-card="${escapeAttr(clip.clipId)}" style="--team:${teamAccent}">
       <a class="clip-thumb twitch-clip-link" href="${escapeAttr(clip.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clip.clipId)}">
         ${thumbnail}
         <span class="clip-platform-badge">Twitch Clip</span>
+        ${watched ? `<span class="clip-watched-badge">視聴済み</span>` : ""}
       </a>
       <div class="clip-card-body">
         <h3><a class="twitch-clip-link" href="${escapeAttr(clip.url)}" target="_blank" rel="noreferrer" data-clip-id="${escapeAttr(clip.clipId)}">${clip.title}</a></h3>
@@ -1091,7 +1097,15 @@ function renderClipPagination(totalRows, totalPages) {
         view: "clips"
       });
       renderClips();
+      scrollClipsToTop();
     });
+  });
+}
+
+function scrollClipsToTop() {
+  elements.clipsView?.scrollIntoView({
+    block: "start",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
   });
 }
 
@@ -1140,6 +1154,24 @@ function writeWatchedClipIds() {
   }
 }
 
+function readWatchedTwitchClipIds() {
+  try {
+    const raw = window.localStorage?.getItem(TWITCH_CLIP_WATCHED_STORAGE_KEY);
+    const values = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(values) ? values.map(String).filter(Boolean) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeWatchedTwitchClipIds() {
+  try {
+    window.localStorage?.setItem(TWITCH_CLIP_WATCHED_STORAGE_KEY, JSON.stringify([...watchedTwitchClipIds]));
+  } catch {
+    // 視聴済みは補助表示なので、保存できない環境では静かに諦める。
+  }
+}
+
 function clipWatchKey(video) {
   return String(video?.videoId || video?.url || video?.title || "").trim();
 }
@@ -1155,6 +1187,17 @@ function markClipWatched(clipId) {
   writeWatchedClipIds();
   elements.clipsGrid?.querySelector(`[data-clip-card="${cssEscape(clipId)}"]`)?.classList.add("is-watched");
   elements.clipsGrid?.querySelector(`[data-clip-card="${cssEscape(clipId)}"] .clip-thumb`)?.insertAdjacentHTML(
+    "beforeend",
+    `<span class="clip-watched-badge">視聴済み</span>`
+  );
+}
+
+function markTwitchClipWatched(clipId) {
+  if (!clipId || watchedTwitchClipIds.has(clipId)) return;
+  watchedTwitchClipIds.add(clipId);
+  writeWatchedTwitchClipIds();
+  elements.clipsGrid?.querySelector(`[data-twitch-clip-card="${cssEscape(clipId)}"]`)?.classList.add("is-watched");
+  elements.clipsGrid?.querySelector(`[data-twitch-clip-card="${cssEscape(clipId)}"] .clip-thumb`)?.insertAdjacentHTML(
     "beforeend",
     `<span class="clip-watched-badge">視聴済み</span>`
   );
