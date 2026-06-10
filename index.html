@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="utf-8">
@@ -14,8 +14,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=20260603-01">
-    <script type="module" src="./app.js?v=20260603-01"></script>
+    <link rel="stylesheet" href="./styles.css?v=20260610-01">
+    <script type="module" src="./app.js?v=20260610-01"></script>
   </head>
   <body>
     <header class="topbar">
@@ -27,6 +27,7 @@
         </div>
       </div>
       <div class="nav-stack">
+        <button id="filterToggle" class="filter-toggle-button nav-rail-toggle" type="button" aria-controls="rightRail" aria-expanded="true">右側を隠す</button>
         <nav class="view-tabs aux-tabs" aria-label="補助リンク">
           <button class="tab-button" data-view="about">このサイトについて</button>
           <button class="tab-button" data-view="contact">お問い合わせ</button>
@@ -334,7 +335,7 @@
       </section>
       </div>
 
-      <aside class="right-rail" aria-label="NEWS and FILTER">
+      <aside id="rightRail" class="right-rail" aria-label="NEWS and FILTER">
         <section id="newsPanel" class="news-panel" aria-label="NEWS">
           <div class="sidebar-heading">
             <p class="eyebrow">NEWS</p>
@@ -348,7 +349,6 @@
             <p class="eyebrow">FILTER</p>
             <div class="filter-heading-row">
               <h2>表示条件</h2>
-              <button id="filterToggle" class="filter-toggle-button" type="button">隠す</button>
             </div>
           </div>
         </aside>

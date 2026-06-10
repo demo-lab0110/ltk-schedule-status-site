@@ -1,4 +1,4 @@
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260602-02";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260610-01";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1246,9 +1246,9 @@ function applyFilterPanelState() {
   document.body.classList.toggle("filter-collapsed", !state.filterOpen);
   document.body.classList.toggle("filter-open", state.filterOpen);
   if (elements.filterToggle) {
-    elements.filterToggle.textContent = state.filterOpen ? "隠す" : "フィルター";
+    elements.filterToggle.textContent = state.filterOpen ? "右側を隠す" : "ニュース・フィルター";
     elements.filterToggle.setAttribute("aria-expanded", String(state.filterOpen));
-    elements.filterToggle.setAttribute("aria-controls", "filterPanel");
+    elements.filterToggle.setAttribute("aria-controls", "rightRail");
   }
 }
 
