@@ -65,7 +65,7 @@ export async function loadLiveStreams(options = {}) {
     return liveData;
   } catch (error) {
     const cached = readCache(LIVE_CACHE_KEY);
-    if (cached) return cached;
+    if (cached) return normalizeLivePayload(cached);
     throw error;
   }
 }
@@ -113,7 +113,8 @@ function normalizeLivePayload(payload) {
       role: clean(item.role).toUpperCase(),
       streamTitle: clean(item.streamTitle),
       streamUrl: clean(item.streamUrl),
-      platform: clean(item.platform) || "twitch"
+      platform: clean(item.platform) || "twitch",
+      verifiedAt: clean(item.verifiedAt || payload.updatedAt)
     })),
     updatedAt: clean(payload.updatedAt),
     configured: Boolean(payload.configured) && Number.isFinite(Date.parse(payload.updatedAt)) && Date.now() - Date.parse(payload.updatedAt) <= 45 * 60 * 1000
