@@ -3832,3 +3832,8 @@ th {
     flex-direction: column;
   }
 }
+
+.participant-directory {display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}
+.roster-card {min-width:0;}
+.roster-opgg {display:inline-flex;align-items:center;min-height:32px;padding:0 6px;color:inherit;font-size:12px;font-weight:700;text-decoration:none;border:1px solid #475569;border-radius:6px;}
+.roster-card .links {flex-wrap:wrap;}

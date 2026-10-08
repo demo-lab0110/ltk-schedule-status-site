@@ -1,8 +1,9 @@
+import { selectLtk4Sheets } from "./ltk4-selection.mjs";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
-const SITE_DATA_CACHE_KEY = "ltkdb.siteData.v1";
-const LIVE_CACHE_KEY = "ltkdb.liveData.v1";
+const SITE_DATA_CACHE_KEY = "ltkdb.siteData.LTK4.v1";
+const LIVE_CACHE_KEY = "ltkdb.liveData.LTK4.v1";
 
 const TEAM_LOGOS = {
   DD: "./image/dd_emblem.png",
@@ -21,7 +22,8 @@ const TEAM_NAMES = {
 const VIEWER_TEAM_KEY = "__LISTENER__";
 
 export async function loadSiteData(options = {}) {
-  const sheets = await fetchSiteSheets(options);
+  const source = await fetchSiteSheets(options);
+  const sheets = source.sheets;
   const teamRows = sheets["サイト_チームマスタ"] || [];
   const scheduleRows = sheets["サイト_予定"] || [];
   const profileRows = sheets["サイト_選手プロフィール"] || [];
@@ -35,6 +37,8 @@ export async function loadSiteData(options = {}) {
   const lookup = buildTeamLookup(teamRows);
 
   return {
+    updatedAt: clean(source.updatedAt),
+    cached: Boolean(source.cached),
     teams: buildTeams(teamRows),
     schedules: buildSchedules(scheduleRows),
     scrimResults: buildScrimResults(resultRows, teamRows, lookup),
@@ -55,7 +59,7 @@ export async function loadLiveStreams(options = {}) {
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) throw new Error(`live-data: ${response.status}`);
     const payload = await response.json();
-    if (!payload.ok) throw new Error(payload.error || "live-data: invalid payload");
+    if (!payload.ok || payload.seasonId !== "LTK4" || payload.sourceSpreadsheetId !== "1ZnAbrmXoNykWtMwMKZzF_-2HyNnDd6MMH3b-amKDZKc") throw new Error("LTK4 live-data: invalid source");
     const liveData = normalizeLivePayload(payload);
     writeCache(LIVE_CACHE_KEY, liveData);
     return liveData;
@@ -82,11 +86,12 @@ async function fetchSiteSheets(options = {}) {
     if (!response.ok) throw new Error(`site-data: ${response.status}`);
     const payload = await response.json();
     if (!payload.ok || !payload.sheets) throw new Error("site-data: invalid payload");
+    const selected = selectLtk4Sheets(payload);
     writeCache(SITE_DATA_CACHE_KEY, payload);
-    return payload.sheets;
+    return { sheets: selected, updatedAt: payload.updatedAt, cached: false };
   } catch (error) {
     const cached = readCache(SITE_DATA_CACHE_KEY);
-    if (cached?.sheets) return cached.sheets;
+    if (cached?.sheets) return { sheets: selectLtk4Sheets(cached), updatedAt: cached.updatedAt, cached: true };
     throw error;
   }
 }
@@ -187,7 +192,8 @@ function buildParticipants(rows, teamRows, lookup) {
       x: clean(row["X URL"]),
       youtube: clean(row["YouTubeチャンネル"]),
       twitch: clean(row["Twitchチャンネル"]),
-      icon: clean(row["アイコン"])
+      icon: clean(row["アイコン"]),
+      opgg: clean(row["OPGGURL"])
     }))
     .filter((row) => row.team && row.name);
 }
@@ -260,7 +266,8 @@ function buildPlayerMatches(rows, teamRows, lookup) {
         deaths: numberValue(row.D),
         assists: numberValue(row.A),
         damage: numberValue(row["ダメージ"]),
-        cs15: numberValue(row["15分CS"]),
+        cs15: optionalNumberValue(row["15分CS"]),
+        cs14: Number(row["計測秒"]) === 840 && optionalNumberValue(row["14分CS"]) >= 0 ? optionalNumberValue(row["14分CS"]) : null,
         gold: numberValue(row["ゴールド"])
       };
     });

@@ -14,8 +14,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
-    <link rel="stylesheet" href="./styles.css?v=20260610-01">
-    <script type="module" src="./app.js?v=20260610-01"></script>
+    <link rel="stylesheet" href="./styles.css?v=20261008-ltk4-draft">
+    <script type="module" src="./app.js?v=20261008-ltk4-draft"></script>
   </head>
   <body>
     <header class="topbar">
@@ -36,6 +36,7 @@
           <button class="tab-button is-active" data-view="calendar">予定</button>
           <button class="tab-button" data-view="league">リーグ表</button>
           <button class="tab-button" data-view="teams">チーム戦績</button>
+          <button class="tab-button" data-view="participants">参加者</button>
           <button class="tab-button" data-view="stats">個人成績</button>
           <button class="tab-button" data-view="ranking">個人ランキング</button>
           <button class="tab-button" data-view="champions">チャンピオン</button>
@@ -110,10 +111,15 @@
         <div id="teamStats" class="table-shell"></div>
       </section>
 
+      <section id="participantsView" class="view" aria-label="参加者一覧">
+        <div class="section-heading"><h2>参加者</h2></div>
+        <div id="participantDirectory" class="participant-directory"></div>
+      </section>
+
       <section id="statsView" class="view" aria-label="個人成績">
         <div class="section-heading">
           <h2>個人成績</h2>
-          <p>画像から取得できたKDA、DPM、15分CSを階級別に集計します。</p>
+          <p>画像から取得できたKDA、DPM、14分CSを階級別に集計します。</p>
         </div>
         <div id="playerStats" class="table-shell"></div>
       </section>
@@ -231,7 +237,7 @@
               <ul>
                 <li>本番・スクリム予定、対戦カード、階級、match_name、開始時刻</li>
                 <li>試合結果、勝敗、試合時間、チームKDA、最大ダメージ</li>
-                <li>個人別のKDA、K/D/A、キル関与率、CS@15、DPM</li>
+                <li>個人別のKDA、K/D/A、キル関与率、CS@14、DPM</li>
                 <li>チャンピオン別のピック率、ピック/バン率、勝率</li>
                 <li>参加者の所属、アイコン、X、YouTube、Twitchリンク</li>
               </ul>

@@ -23,12 +23,19 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Fetch latest site and live data
+      - name: Fetch latest LTK4 site and live data
+        env:
+          LTK4_GAS_URL: ${{ vars.LTK4_GAS_URL }}
         run: |
           node <<'NODE'
           const fs = await import("node:fs");
 
-          const GAS_URL = "https://script.google.com/macros/s/AKfycbwNzByFJex1ZVj7mKFrMnGfYDrRSK_6Ew1j5A-S6hQymMs8a7Emx1_wqWGPObNCe_0/exec";
+          const GAS_URL = process.env.LTK4_GAS_URL;
+          if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(GAS_URL || "")) {
+            throw new Error("Set repository variable LTK4_GAS_URL to the reviewed read-only deployment");
+          }
+          const LTK4_BOOK = "1ZnAbrmXoNykWtMwMKZzF_-2HyNnDd6MMH3b-amKDZKc";
+          const { selectLtk4Sheets } = await import("./ltk4-selection.mjs");
 
           async function fetchJsonp(api) {
             const url = `${GAS_URL}?api=${api}&callback=__cb`;
@@ -49,33 +56,45 @@ jobs:
           }
 
           const sitePayload = await fetchJsonp("site");
-          if (!sitePayload.ok || !sitePayload.sheets) {
+          if (!sitePayload.ok || !sitePayload.sheets || sitePayload.publicSchema !== "LTK4-public-v1" || sitePayload.selectionPolicy !== "latest-approved-v1") {
             throw new Error(sitePayload.error || "Invalid site data payload");
           }
 
           fs.writeFileSync("site-data.json", JSON.stringify({
             ok: true,
+            seasonId: "LTK4",
+            publicSchema: "LTK4-public-v1",
+            selectionPolicy: "latest-approved-v1",
+            sourceSpreadsheetId: LTK4_BOOK,
             updatedAt: sitePayload.updatedAt || new Date().toISOString(),
-            sheets: sitePayload.sheets
+            sheets: selectLtk4Sheets(sitePayload)
           }));
 
           try {
             const livePayload = await fetchJsonp("live");
-            if (!livePayload.ok) {
+            if (!livePayload.ok || livePayload.seasonId !== "LTK4" || livePayload.sourceSpreadsheetId !== LTK4_BOOK) {
               throw new Error(livePayload.error || "Invalid live data payload");
             }
             fs.writeFileSync("live-data.json", JSON.stringify({
               ok: true,
-              updatedAt: livePayload.updatedAt || new Date().toISOString(),
+              seasonId: "LTK4",
+              sourceSpreadsheetId: LTK4_BOOK,
+              updatedAt: livePayload.updatedAt || null,
               configured: Boolean(livePayload.configured),
               streams: livePayload.streams || []
             }));
           } catch (error) {
             console.warn(`LIVE update skipped: ${error.message}`);
-            if (!fs.existsSync("live-data.json")) {
+            let existingLive;
+            try { existingLive = JSON.parse(fs.readFileSync("live-data.json", "utf8")); } catch {}
+            if (existingLive?.ok && existingLive.seasonId === "LTK4" && existingLive.sourceSpreadsheetId === LTK4_BOOK) {
+              fs.writeFileSync("live-data.json", JSON.stringify({ ...existingLive, stale: true, error: "LIVE refresh unavailable" }));
+            } else {
               fs.writeFileSync("live-data.json", JSON.stringify({
                 ok: true,
-                updatedAt: new Date().toISOString(),
+                seasonId: "LTK4",
+                sourceSpreadsheetId: LTK4_BOOK,
+                updatedAt: null,
                 configured: false,
                 streams: [],
                 error: error.message
