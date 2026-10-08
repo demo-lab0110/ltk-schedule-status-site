@@ -4,6 +4,7 @@ const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
 const SITE_DATA_CACHE_KEY = "ltkdb.siteData.LTK4.v1";
 const LIVE_CACHE_KEY = "ltkdb.liveData.LTK4.v1";
+const PUBLIC_LIVE_API = "https://script.google.com/macros/s/AKfycbw8EftshgF1A-aUMfXVz_jiFnknrGw6igbwitqnLWbXFq61_zOgXblD01buEBn0v2Uz/exec";
 
 const TEAM_LOGOS = {
   DD: "./image/dd_emblem.png",
@@ -58,8 +59,11 @@ export async function loadLiveStreams(options = {}) {
     url.searchParams.set("_", String(Math.floor(Date.now() / SITE_DATA_REFRESH_MS)));
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) throw new Error(`live-data: ${response.status}`);
-    const payload = await response.json();
+    let payload = await response.json();
     if (!payload.ok || payload.seasonId !== "LTK4" || payload.sourceSpreadsheetId !== "1ZnAbrmXoNykWtMwMKZzF_-2HyNnDd6MMH3b-amKDZKc") throw new Error("LTK4 live-data: invalid source");
+    if (!payload.configured || !Number.isFinite(Date.parse(payload.updatedAt)) || Date.now()-Date.parse(payload.updatedAt)>8*60*1000) {
+      try { payload = await fetchPublicLivePayload(); } catch { /* Keep the verified static snapshot, with freshness filtering below. */ }
+    }
     const liveData = normalizeLivePayload(payload);
     writeCache(LIVE_CACHE_KEY, liveData);
     return liveData;
@@ -68,6 +72,23 @@ export async function loadLiveStreams(options = {}) {
     if (cached) return normalizeLivePayload(cached);
     throw error;
   }
+}
+
+function fetchPublicLivePayload() {
+  return new Promise((resolve,reject) => {
+    const callback = `__ltk4Live_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const cleanup = () => { window.clearTimeout(timer); script.remove(); delete window[callback]; };
+    const timer = window.setTimeout(() => { cleanup(); reject(new Error("LTK4 live refresh timed out")); }, 12000);
+    window[callback] = payload => {
+      cleanup();
+      if (!payload?.ok || payload.seasonId !== "LTK4" || payload.sourceSpreadsheetId !== "1ZnAbrmXoNykWtMwMKZzF_-2HyNnDd6MMH3b-amKDZKc") reject(new Error("LTK4 live refresh invalid source"));
+      else resolve(payload);
+    };
+    script.onerror = () => { cleanup(); reject(new Error("LTK4 live refresh unavailable")); };
+    script.src = `${PUBLIC_LIVE_API}?api=live&callback=${callback}`;
+    document.head.append(script);
+  });
 }
 
 export function twitchLoginFromUrl(value) {
