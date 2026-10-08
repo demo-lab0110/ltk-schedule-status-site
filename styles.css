@@ -1550,6 +1550,15 @@ body.filter-collapsed .filter-panel {
   font-size: 0.72rem;
 }
 
+.is-regular-day .fc-match-sub {
+  grid-template-columns: 1fr;
+}
+
+.is-regular-day .fc-match-sub span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .fc-event-tbd {
   grid-column: 1 / -1;
   color: #f8fafc;
