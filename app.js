@@ -1,4 +1,5 @@
 import { groupParticipants } from "./participant-groups.mjs";
+import { buildCalendarDisplayItems } from "./calendar-display.mjs";
 ﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261009-ltk4";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
@@ -1388,7 +1389,7 @@ function tierSort(tier) {
 }
 
 function renderCalendar() {
-  const items = filterCalendarItems();
+  const items = buildCalendarDisplayItems(filterCalendarItems());
   renderCardCalendar(items);
   renderFullCalendar(items);
 }
@@ -1411,12 +1412,12 @@ function renderFullCalendar(items) {
   }
   const events = items.map((item) => ({
     id: item.id,
-    title: item.status === "tbd" ? tbdDisplayTitle(item) : calendarEventTitle(item),
+    title: item.regularDayGroup ? `Regular Stage ${item.day}` : item.status === "tbd" ? tbdDisplayTitle(item) : calendarEventTitle(item),
     start: item.date,
     allDay: true,
     sortOrder: calendarSortKey(item),
-    backgroundColor: "#191919",
-    borderColor: "#34383d",
+    backgroundColor: "#190e11",
+    borderColor: "#533038",
     textColor: "#f8fafc",
     extendedProps: { item }
   }));
@@ -1472,7 +1473,7 @@ function renderFullCalendar(items) {
         return { domNodes: [calendarEventNode(info.event.extendedProps.item)] };
       },
       eventClick(info) {
-        openMatch(info.event.extendedProps.item);
+        openCalendarItem(info.event.extendedProps.item);
       },
       events
     });
@@ -1502,6 +1503,17 @@ function collapseFullCalendarDay() {
 function calendarEventNode(item) {
   const node = document.createElement("div");
   node.className = `fc-match-event ${isViewerScrim(item) ? "is-viewer-match" : ""}`;
+  if (item.regularDayGroup) {
+    node.classList.add("is-regular-day");
+    node.innerHTML = `<div class="fc-regular-heading">Regular Stage / ${escapeAttr(item.day)}</div>
+      <div class="fc-regular-pairs">${item.matchups.map(pair => `<div class="fc-regular-pair">
+        <span class="fc-match-team">${calendarTeamIcon(pair.left)}<span>${teamShortName(pair.left)}</span></span>
+        <span class="fc-event-vs">vs</span>
+        <span class="fc-match-team"><span>${teamShortName(pair.right)}</span>${calendarTeamIcon(pair.right)}</span>
+      </div>`).join("")}</div>
+      <div class="fc-match-sub"><span>${escapeAttr(item.eventTime || "開始時刻未発表")} / ${escapeAttr(item.tier)}</span></div>`;
+    return node;
+  }
   const tier = item.tier && item.tier !== "NEXT/CORE" ? item.tier : "";
   const caption = calendarMatchCaption(item);
   if (!item.left && !item.right && item.displayTitle) {
@@ -1612,7 +1624,7 @@ function scheduleCard(item) {
   card.className = `schedule-card ${item.resultRecord ? "is-result" : ""} ${isViewerScrim(item) ? "is-viewer-match" : ""}`;
   card.type = "button";
   card.append(calendarEventNode(item));
-  card.addEventListener("click", () => openMatch(item));
+  card.addEventListener("click", () => openCalendarItem(item));
   return card;
   const left = teams[item.left];
   const right = teams[item.right];
@@ -1701,6 +1713,34 @@ function resultLine(item) {
   return `<div class="side-line"><span>RESULT ${record.leftWins}-${record.rightWins}</span><span>${record.games}G / ${record.dateLabel}</span></div>`;
 }
 
+function openCalendarItem(item) {
+  if (item.regularDayGroup) openRegularDay(item);
+  else openMatch(item);
+}
+
+function openRegularDay(item, options = {}) {
+  prepareDialogNavigation({ type: "regularDay", item }, options);
+  elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} / ${item.tier}`;
+  elements.dialogTitle.textContent = `Regular Stage / ${item.day}`;
+  const section = document.createElement("section");
+  section.className = "regular-day-details";
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent = "階級ごとの対戦詳細";
+  section.append(note);
+  for (const match of item.groupMembers) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "regular-day-detail-button";
+    button.textContent = `${match.tier} / ${teamShortName(match.left)} vs ${teamShortName(match.right)}${match.resultRecord ? ` / ${match.resultRecord.leftWins}-${match.resultRecord.rightWins}` : ""}`;
+    button.addEventListener("click", () => openMatch(match, { clear: false, push: true }));
+    section.append(button);
+  }
+  elements.dialogBody.replaceChildren(section);
+  if (!elements.dialog.open) elements.dialog.showModal();
+  resetDialogScroll();
+}
+
 function openMatch(item, options = {}) {
   prepareDialogNavigation({ type: "match", item }, options);
   trackAnalyticsEvent("match_detail_open", {
@@ -1737,6 +1777,7 @@ function restorePreviousDialogView() {
   if (!previous) return;
   if (previous.type === "team") openTeamDetail(previous.item, { clear: false });
   if (previous.type === "match") openMatch(previous.item, { clear: false });
+  if (previous.type === "regularDay") openRegularDay(previous.item, { clear: false });
   if (previous.type === "player") openPlayerDetail(previous.item, { clear: false });
   updateDialogBackButton();
 }
