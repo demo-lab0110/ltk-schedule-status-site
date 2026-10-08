@@ -1,5 +1,5 @@
 import { groupParticipants } from "./participant-groups.mjs";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260610-01";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261009-ltk4";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
