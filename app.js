@@ -4192,7 +4192,7 @@ function participantDirectoryCard(person){
     const avatar = document.createElement("div");
     avatar.className = "avatar";
     const icon = rosterUrl(person.icon);
-    if (icon) { const img=document.createElement("img"); img.src=icon; img.alt=""; img.loading="lazy"; avatar.append(img); }
+    if (icon) { const img=document.createElement("img"); img.src=icon; img.alt=""; img.loading="lazy"; img.addEventListener("error",()=>{const initial=document.createElement("span");initial.textContent=person.name.slice(0,1);avatar.replaceChildren(initial);},{once:true}); avatar.append(img); }
     else { const initial=document.createElement("span"); initial.textContent=person.name.slice(0,1); avatar.append(initial); }
     const meta=document.createElement("div"); meta.className="participant-meta";
     const name=document.createElement("strong"); name.textContent=person.name;
