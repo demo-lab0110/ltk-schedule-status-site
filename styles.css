@@ -1435,6 +1435,18 @@ body.filter-collapsed .filter-panel {
   white-space: nowrap;
 }
 
+.fc-match-event.is-announcement .fc-match-title {
+  display: block;
+  padding: 7px 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.fc-match-event.is-announcement .fc-match-sub {
+  grid-template-columns: 1fr;
+}
+
 .fc-match-team {
   display: inline-flex;
   align-items: center;
@@ -3837,3 +3849,13 @@ th {
 .roster-card {min-width:0;}
 .roster-opgg {display:inline-flex;align-items:center;min-height:32px;padding:0 6px;color:inherit;font-size:12px;font-weight:700;text-decoration:none;border:1px solid #475569;border-radius:6px;}
 .roster-card .links {flex-wrap:wrap;}
+
+/* Local LTK4 roster grouping proposal: retains the existing participant cards. */
+.participant-directory{display:block;}
+.roster-team-section{margin-bottom:28px;}
+.roster-team-heading{display:flex;align-items:center;gap:12px;margin:0 0 16px;font-size:22px;}
+.roster-team-heading small{font-size:13px;font-weight:500;color:var(--muted,#94a3b8);}
+.roster-team-logo{width:56px;height:56px;object-fit:contain;}
+.roster-tier-section{margin:0 0 18px;}
+.roster-tier-section h3{margin:0 0 8px;font-size:14px;letter-spacing:.08em;}
+.roster-tier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:12px;}

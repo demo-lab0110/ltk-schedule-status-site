@@ -98,7 +98,12 @@ async function fetchSiteSheets(options = {}) {
 
 function normalizeLivePayload(payload) {
   return {
-    streams: (payload.streams || []).map((item) => ({
+    streams: (payload.streams || []).filter((item) => {
+      const checked = Date.parse(item.verifiedAt || payload.updatedAt);
+      const limit = item.platform === "youtube" ? 45 * 60 * 1000 : 15 * 60 * 1000;
+      return Number.isFinite(checked) && checked <= Date.now() && Date.now() - checked <= limit
+        && /^https:\/\/(www\.)?(twitch\.tv\/[A-Za-z0-9_]+|youtube\.com\/watch\?v=[A-Za-z0-9_-]+)$/.test(item.streamUrl || "");
+    }).map((item) => ({
       name: clean(item.name),
       iconUrl: clean(item.iconUrl),
       teamName: clean(item.teamName),
@@ -111,7 +116,7 @@ function normalizeLivePayload(payload) {
       platform: clean(item.platform) || "twitch"
     })),
     updatedAt: clean(payload.updatedAt),
-    configured: Boolean(payload.configured)
+    configured: Boolean(payload.configured) && Number.isFinite(Date.parse(payload.updatedAt)) && Date.now() - Date.parse(payload.updatedAt) <= 45 * 60 * 1000
   };
 }
 

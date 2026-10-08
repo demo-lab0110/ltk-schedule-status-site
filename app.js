@@ -1,3 +1,4 @@
+import { groupParticipants } from "./participant-groups.mjs";
 ﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20260610-01";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
@@ -87,7 +88,7 @@ const narrowLayoutQuery = window.matchMedia("(max-width: 900px)");
 
 const state = {
   view: "calendar",
-  calendarMode: window.matchMedia("(max-width: 760px)").matches ? "cards" : "full",
+  calendarMode: "full",
   filterOpen: true,
   type: "",
   tier: "",
@@ -304,7 +305,7 @@ async function hydrateLiveStreams(options = {}) {
     liveConfigured = Boolean(payload.configured);
     if (elements.liveNowStatus) {
       elements.liveNowStatus.textContent = payload.configured
-        ? `LOL配信中のLTK参加者 ${liveStreams.length}件`
+        ? `確認できたLOL配信 ${liveStreams.length}件（取得範囲内）`
         : "配信状況をまだ取得していません";
     }
   } catch (error) {
@@ -1260,7 +1261,7 @@ function applyFilterPanelState() {
 function renderLiveNow() {
   if (!elements.liveNowList) return;
   if (!liveStreams.length) {
-    elements.liveNowList.innerHTML = `<p class="live-empty">${liveConfigured ? "現在LOL配信中のLTK参加者はいません" : "配信情報の準備中"}</p>`;
+    elements.liveNowList.innerHTML = `<p class="live-empty">${liveConfigured ? "取得範囲内ではLOL配信を確認できていません" : "配信情報の準備中"}</p>`;
     return;
   }
   elements.liveNowList.replaceChildren(...liveStreams.map(liveNowCard));
@@ -1276,14 +1277,14 @@ function liveNowCard(stream) {
   card.style.setProperty("--team", team.accent || "#14b8a6");
   card.innerHTML = `
     <div class="live-person">
-      ${stream.iconUrl ? `<img class="live-avatar" src="${stream.iconUrl}" alt="">` : `<span class="live-avatar">${(stream.name || "?").slice(0, 1)}</span>`}
+      ${stream.iconUrl ? `<img class="live-avatar" src="${escapeAttr(stream.iconUrl)}" alt="">` : `<span class="live-avatar">${escapeAttr((stream.name || "?").slice(0, 1))}</span>`}
       <div>
-        <strong>${stream.name || "Unknown"}</strong>
+        <strong>${escapeAttr(stream.name || "Unknown")}</strong>
         <p>${liveTeamMark(stream.teamKey, stream.teamShortName)} <span>${stream.teamShortName || team.key || "-"}</span> <span>${stream.rank || "-"}</span> <span>${stream.role || "-"}</span></p>
       </div>
     </div>
-    <p class="live-title">${stream.streamTitle || "League of Legends"}</p>
-    <span class="live-link">Twitchで見る</span>
+    <p class="live-title">${escapeAttr(stream.streamTitle || "League of Legends")}</p>
+    <span class="live-link">${stream.platform === "youtube" ? "YouTube" : "Twitch"}で見る</span>
   `;
   card.addEventListener("click", () => {
     trackAnalyticsEvent("live_stream_click", {
@@ -1292,7 +1293,7 @@ function liveNowCard(stream) {
       tier: stream.rank || "",
       role: stream.role || "",
       stream_url: stream.streamUrl || "",
-      platform: "twitch"
+      platform: stream.platform || "twitch"
     });
   });
   return card;
@@ -1424,8 +1425,11 @@ function renderFullCalendar(items) {
     if (!state.fullCalendar) {
       state.fullCalendar = new window.FullCalendar.Calendar(elements.fullCalendar, {
       locale: "ja",
-      initialView: "dayGridMonth",
-      initialDate: japanDateKey(),
+      initialView: "ltk4Season",
+      initialDate: "2026-10-05",
+      firstDay: 1,
+      validRange: { start: "2026-10-05", end: "2026-11-23" },
+      views: { ltk4Season: { type: "dayGrid", duration: { weeks: 7 } } },
       height: "auto",
       fixedWeekCount: false,
       dayMaxEvents: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
@@ -1441,7 +1445,7 @@ function renderFullCalendar(items) {
       },
       displayEventTime: false,
       eventOrder: "sortOrder",
-      headerToolbar: { left: "prev,next today", center: "title", right: "" },
+      headerToolbar: { left: "", center: "title", right: "" },
       buttonText: { today: "今日" },
       dayCellClassNames(info) {
         const key = dateKey(info.date);
@@ -1500,6 +1504,11 @@ function calendarEventNode(item) {
   node.className = `fc-match-event ${isViewerScrim(item) ? "is-viewer-match" : ""}`;
   const tier = item.tier && item.tier !== "NEXT/CORE" ? item.tier : "";
   const caption = calendarMatchCaption(item);
+  if (!item.left && !item.right && item.displayTitle) {
+    node.classList.add("is-announcement");
+    node.innerHTML = `<div class="fc-match-title">${escapeAttr(item.displayTitle.replace(/ 放送開始予定$/, ""))}</div><div class="fc-match-sub"><span>${escapeAttr(item.eventTime ? `${item.eventTime} JST${item.type === "Worlds" ? " 放送開始予定" : ""}` : "開始時刻未発表")}</span></div>`;
+    return node;
+  }
   if (isViewerScrim(item)) {
     node.innerHTML = `
       ${tier ? `<div class="fc-match-tier">${tier}</div>` : ""}
@@ -1553,6 +1562,10 @@ function tbdDisplayTitle(item) {
 }
 
 function calendarMatchCaption(item) {
+  if (/^LTK4_/.test(item.id || "")) {
+    const stage = { REGULAR: "Regular Stage", MASTERS: "Masters Cup", PLAYOFFS: "Playoffs" }[item.stage] || item.stage;
+    return [item.eventTime || "開始時刻未発表", stage, item.day, item.match ? `M${item.match}` : ""].filter(Boolean).join(" / ");
+  }
   return [item.eventTime, calendarMatchName(item)].filter(Boolean).join(" / ");
 }
 
@@ -4158,12 +4171,22 @@ function rateWithCount(numerator, denominator) {
 
 
 function renderParticipantDirectory() {
-  const container = document.querySelector("#participantDirectory");
-  if (!container) return;
-  const rows = participants.filter(p => (!state.team || p.team === state.team)
-    && (!state.tier || p.tier === state.tier)
-    && (!state.keyword || (p.name+" "+p.team+" "+p.role).toLowerCase().includes(state.keyword.toLowerCase())));
-  container.replaceChildren(...rows.map(person => {
+  const container=document.querySelector("#participantDirectory");
+  if(!container)return;
+  const groups=groupParticipants(participants,state);
+  container.replaceChildren(...groups.map(group=>{
+    const section=document.createElement("section");section.className="roster-team-section";
+    const heading=document.createElement("h2");heading.className="roster-team-heading";
+    const logo=teams[group.team]?.logo;
+    if(logo&&/^\.\/image\/(dd|cc|it|lr)_emblem\.png$/.test(logo)){const image=document.createElement("img");image.src=logo;image.alt="";image.className="roster-team-logo";heading.append(image);}
+    const title=document.createElement("span");title.textContent=teams[group.team]?.name||group.team;
+    const count=document.createElement("small");count.textContent=group.count+"名";heading.append(title,count);section.append(heading);
+    for(const tier of group.tiers){const subsection=document.createElement("section");subsection.className="roster-tier-section";const subheading=document.createElement("h3");subheading.textContent=tier.tier;const grid=document.createElement("div");grid.className="roster-tier-grid";grid.append(...tier.players.map(participantDirectoryCard));subsection.append(subheading,grid);section.append(subsection);}
+    return section;
+  }));
+  if(!groups.length){const empty=document.createElement("p");empty.className="news-empty";empty.textContent="条件に一致する参加者はいません";container.append(empty);}
+}
+function participantDirectoryCard(person){
     const card = document.createElement("article");
     card.className = "participant-card roster-card";
     const avatar = document.createElement("div");
@@ -4184,8 +4207,6 @@ function renderParticipantDirectory() {
     const opgg=rosterUrl(person.opgg,"op.gg");
     if(opgg){const link=document.createElement("a");link.className="roster-opgg";link.href=opgg;link.target="_blank";link.rel="noopener noreferrer";link.textContent="OP.GG";links.append(link);}
     card.append(avatar,meta,links);return card;
-  }));
-  if(!rows.length){const empty=document.createElement("p");empty.className="news-empty";empty.textContent="条件に一致する参加者はいません";container.append(empty);}
 }
 function rosterUrl(value,host="") {
   if (!value) return "";
