@@ -16,6 +16,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -38,21 +39,34 @@ jobs:
           const { selectLtk4Sheets } = await import("./ltk4-selection.mjs");
 
           async function fetchJsonp(api) {
-            const url = `${GAS_URL}?api=${api}&callback=__cb`;
-            const response = await fetch(url, {
-              headers: { "User-Agent": "ltk-schedule-status-site-data-updater" }
-            });
-            if (!response.ok) {
-              throw new Error(`${api} GAS request failed: ${response.status}`);
+            let lastError;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const url = GAS_URL + '?api=' + api + '&callback=__cb';
+                let response = await fetch(url, {
+                  redirect: "manual", signal: AbortSignal.timeout(30000),
+                  headers: { "User-Agent": "ltk-schedule-status-site-data-updater" }
+                });
+                if (response.status === 302) {
+                  const location = response.headers.get("location");
+                  if (!location || new URL(location).origin !== "https://script.googleusercontent.com")
+                    throw new Error("Unexpected GAS response redirect");
+                  response = await fetch(location, { redirect: "error", signal: AbortSignal.timeout(30000) });
+                }
+                if (response.status === 401 || response.status === 403)
+                  throw Object.assign(new Error(api + " API access denied"), { noRetry: true });
+                if (!response.ok) throw new Error(api + " GAS request failed: " + response.status);
+                const text = (await response.text()).replace(/^\uFEFF/, "");
+                const match = text.match(/^__cb\(([\s\S]*)\);?\s*$/);
+                if (!match) throw new Error(api + " returned invalid JSONP");
+                return JSON.parse(match[1]);
+              } catch (error) {
+                lastError = error;
+                if (error.noRetry) throw error;
+                if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+              }
             }
-
-            const text = (await response.text()).replace(/^\uFEFF/, "");
-            const match = text.match(/^__cb\(([\s\S]*)\);?\s*$/);
-            if (!match) {
-              throw new Error(`${api} returned invalid JSONP`);
-            }
-
-            return JSON.parse(match[1]);
+            throw new Error(api + " refresh unavailable after bounded retries");
           }
 
           const sitePayload = await fetchJsonp("site");
