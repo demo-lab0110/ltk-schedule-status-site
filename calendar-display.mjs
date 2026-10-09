@@ -7,11 +7,14 @@ export function buildCalendarDisplayItems(items) {
     const tier = String(item.tier || "").toUpperCase();
     const regular = /^LTK4_REGULAR_D\d+_M\d+$/.test(id) && stage === "REGULAR"
       && item.type === "本番" && ["NEXT", "CORE"].includes(tier) && item.left && item.right;
-    if (!regular) { output.push(item); continue; }
-    const key = `${item.date}|${item.day || ""}`;
+    const masters = /^LTK4_MASTERS_D\d+_M[12]$/.test(id) && stage === "MASTERS"
+      && item.type === "本番" && item.left && item.right;
+    if (!regular && !masters) { output.push(item); continue; }
+    const key = `${stage}|${item.date}|${item.day || ""}`;
     let group = groups.get(key);
     if (!group) {
-      group = { ...item, id: `display_regular_${key}`, regularDayGroup: true,
+      group = { ...item, id: `display_${regular ? "regular" : "masters"}_${key}`,
+        regularDayGroup: regular, mastersDayGroup: !!masters,
         groupMembers: [], matchups: [], tier: "", match: "", resultRecord: null };
       groups.set(key, group); output.push(group);
     }
@@ -19,9 +22,17 @@ export function buildCalendarDisplayItems(items) {
     const pairKey = [item.left, item.right].sort().join("|");
     if (!group.matchups.some(pair => pair.key === pairKey))
       group.matchups.push({ key: pairKey, left: item.left, right: item.right });
-    group.tier = ["NEXT", "CORE"].filter(t => group.groupMembers.some(m => String(m.tier).toUpperCase() === t)).join("/");
+    group.tier = masters ? "MASTERS" : ["NEXT", "CORE"].filter(t => group.groupMembers.some(m => String(m.tier).toUpperCase() === t)).join("/");
     const times = [...new Set(group.groupMembers.map(m => m.eventTime || ""))];
     group.eventTime = times.length === 1 ? times[0] : "";
   }
   return output;
+}
+
+// Source times remain Japanese local 24-hour values; only their labels change.
+export function formatCalendarTime(value) {
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(String(value || "").trim());
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return "時刻未定";
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? "AM" : "PM"}`;
 }
