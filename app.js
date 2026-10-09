@@ -1511,7 +1511,7 @@ function calendarEventNode(item) {
         <span class="fc-event-vs">vs</span>
         <span class="fc-match-team"><span>${teamShortName(pair.right)}</span>${calendarTeamIcon(pair.right)}</span>
       </div>`).join("")}</div>
-      <div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime))} / ${escapeAttr(item.tier)}${item.mastersDayGroup ? " / 1回戦" : ""}</span></div>`;
+      <div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime))} / ${escapeAttr(item.tier)}</span></div>`;
     return node;
   }
   const tier = item.tier && item.tier !== "NEXT/CORE" ? item.tier : "";
@@ -1721,12 +1721,12 @@ function openCalendarItem(item) {
 function openRegularDay(item, options = {}) {
   prepareDialogNavigation({ type: "regularDay", item }, options);
   elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} / ${item.tier}`;
-  elements.dialogTitle.textContent = `${item.mastersDayGroup ? "Masters Cup / 1回戦" : "Regular Stage"} / ${item.day}`;
+  elements.dialogTitle.textContent = `${item.mastersDayGroup ? "Masters Cup" : "Regular Stage"} / ${item.day}`;
   const section = document.createElement("section");
   section.className = "regular-day-details";
   const note = document.createElement("p");
   note.className = "muted";
-  note.textContent = item.mastersDayGroup ? "1回戦の対戦詳細" : "階級ごとの対戦詳細";
+  note.textContent = item.mastersDayGroup ? "対戦詳細" : "階級ごとの対戦詳細";
   section.append(note);
   for (const match of item.groupMembers) {
     const button = document.createElement("button");
