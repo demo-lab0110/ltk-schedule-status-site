@@ -15,7 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
     <link rel="stylesheet" href="./styles.css?v=20261009-red-calendar-tiers">
-    <script type="module" src="./app.js?v=20261009-masters-label"></script>
+    <script type="module" src="./app.js?v=20261009-static-live"></script>
   </head>
   <body>
     <header class="topbar">
@@ -46,11 +46,11 @@
     </header>
 
     <main class="app-layout">
-      <aside class="live-now-panel" aria-label="LIVE NOW">
+      <aside class="live-now-panel" aria-label="保存済み配信情報">
         <div class="sidebar-heading">
-          <p class="eyebrow">LIVE NOW</p>
+          <p class="eyebrow">保存済み配信情報</p>
           <h2>LOL配信中</h2>
-          <p id="liveNowStatus">LTK参加者の配信を確認中</p>
+          <p id="liveNowStatus">LIVE更新停止中</p>
         </div>
         <div id="liveNowList" class="live-now-list"></div>
       </aside>
@@ -215,7 +215,7 @@
           <section class="info-block">
             <h3>LTK Schedule & Statusについて</h3>
             <p>
-              LTK Schedule & Statusは、League The k4senの参加者・視聴者が、試合予定、スクリム結果、参加者プロフィール、LIVE配信中の情報をまとめて確認できるイベントデータサイトです。
+              LTK Schedule & Statusは、League The k4senの参加者・視聴者が、試合予定、スクリム結果、参加者プロフィール、保存済み配信情報をまとめて確認できるイベントデータサイトです。
               データベースとして管理しているLTKDBをもとに、カレンダー、リーグ表、個人成績、チャンピオン成績を見やすく整理しています。
             </p>
           </section>
@@ -227,7 +227,7 @@
                 <li>スクリム・本番予定をフルカレンダー形式とカード形式で確認できます。</li>
                 <li>イベントカードから対戦カード、参加者、Gameごとの使用チャンピオンとスタッツを確認できます。</li>
                 <li>階級別のリーグ表、個人成績、チャンピオン成績を確認できます。</li>
-                <li>LTK参加者のうち、League of Legendsを配信中のTwitch配信をLIVE NOWに表示します。</li>
+                <li>LIVE情報の更新は停止しています。保存データの確認時刻を表示し、古い配信情報は表示しません。</li>
                 <li>スクリムやリスナー戦を除外して、用途に合わせた集計を確認できます。</li>
               </ul>
             </section>
@@ -263,7 +263,7 @@
           <section class="info-block">
             <h3>外部サービスについて</h3>
             <p>
-              本サイトは、参加者プロフィールやLIVE NOW表示のために、X、YouTube、Twitchなど外部サービスへのリンクや配信情報を参照します。
+              本サイトは、参加者プロフィールや保存済み配信情報の表示のために、X、YouTube、Twitchなど外部サービスへのリンクや配信情報を参照します。
               外部サイトで提供される情報や利用条件は、それぞれのサービスの規約を確認してください。
             </p>
             <p>

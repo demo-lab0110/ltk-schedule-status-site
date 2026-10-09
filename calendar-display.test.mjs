@@ -8,7 +8,9 @@ const items = schedules.map(r=>({id:r.schedule_id,date:r.event_date,day:r.day_la
   eventTime:r.event_time,match:r.match_no,linkedResultIds:[`${r.schedule_id}_RESULT`]}));
 test('59 original rows become 32 presentation events; original regular and first-round Masters rows remain reachable',()=>{
   const snapshot=JSON.stringify(items), display=buildCalendarDisplayItems(items), groups=display.filter(x=>x.regularDayGroup);
-  assert.equal(items.length,59); assert.equal(display.length,32); assert.equal(groups.length,6);
+  const scrims = items.filter(x => /^LTK4_SCRIM_/.test(x.id));
+  assert.equal(items.length - scrims.length,59); assert.equal(display.length - scrims.length,32); assert.equal(groups.length,6);
+  assert.deepEqual(display.filter(x => /^LTK4_SCRIM_/.test(x.id)), scrims);
   assert.ok(groups.every(g=>g.groupMembers.length===4&&g.matchups.length===2&&g.tier==='NEXT/CORE'));
   assert.equal(new Set(groups.flatMap(g=>g.groupMembers.map(m=>m.id))).size,24);
   assert.ok(groups.every(g=>g.groupMembers.every(m=>items.includes(m)&&m.linkedResultIds.length===1)));
@@ -38,7 +40,7 @@ test('12-hour display labels preserve midnight/noon and unknown times without al
   assert.equal(source.eventTime,originalTime);
 });
 test('team and tier filtering before grouping retains only the selected original matches',()=>{
-  const core=buildCalendarDisplayItems(items.filter(x=>x.tier==='CORE'));
+  const core=buildCalendarDisplayItems(items.filter(x=>x.tier==='CORE'&&!/^LTK4_SCRIM_/.test(x.id)));
   assert.equal(core.length,6); assert.ok(core.every(x=>x.groupMembers.length===2&&x.tier==='CORE'));
   const cc=buildCalendarDisplayItems(items.filter(x=>x.left==='CC'||x.right==='CC'));
   assert.ok(cc.filter(x=>x.regularDayGroup).every(x=>x.matchups.length===1&&x.groupMembers.length===2));
