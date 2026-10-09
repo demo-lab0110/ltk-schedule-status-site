@@ -118,6 +118,7 @@ function normalizeLivePayload(payload) {
       verifiedAt: clean(item.verifiedAt || payload.updatedAt)
     })),
     updatedAt: clean(payload.updatedAt),
+    stale: Boolean(payload.stale) || !Number.isFinite(Date.parse(payload.updatedAt)) || Date.parse(payload.updatedAt) > Date.now() || Date.now() - Date.parse(payload.updatedAt) > 15 * 60 * 1000,
     configured: Boolean(payload.configured) && Number.isFinite(Date.parse(payload.updatedAt)) && Date.now() - Date.parse(payload.updatedAt) <= 45 * 60 * 1000
   };
 }

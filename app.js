@@ -1,6 +1,6 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-live-restored";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-live-freshness";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -303,9 +303,11 @@ async function hydrateLiveStreams(options = {}) {
     if (elements.liveNowStatus) elements.liveNowStatus.textContent = "LTK参加者の配信を確認中";
     const payload = await loadLiveStreams(options);
     liveStreams = payload.streams || [];
-    liveConfigured = Boolean(payload.configured);
+    liveConfigured = Boolean(payload.configured) && !payload.stale;
     if (elements.liveNowStatus) {
-      elements.liveNowStatus.textContent = payload.configured
+      elements.liveNowStatus.textContent = payload.stale
+        ? `配信情報の更新待ち（最終確認 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "不明"}）`
+        : payload.configured
         ? `確認できたLOL配信 ${liveStreams.length}件（取得範囲内）`
         : "配信状況をまだ取得していません";
     }
@@ -1262,7 +1264,7 @@ function applyFilterPanelState() {
 function renderLiveNow() {
   if (!elements.liveNowList) return;
   if (!liveStreams.length) {
-    elements.liveNowList.innerHTML = `<p class="live-empty">${liveConfigured ? "取得範囲内ではLOL配信を確認できていません" : "配信情報の準備中"}</p>`;
+    elements.liveNowList.innerHTML = `<p class="live-empty">${liveConfigured ? "取得範囲内ではLOL配信を確認できていません" : "配信情報の更新を待っています"}</p>`;
     return;
   }
   elements.liveNowList.replaceChildren(...liveStreams.map(liveNowCard));
