@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Fetch latest LTK4 site data
+      - name: Fetch latest LTK4 site and live data
         env:
           LTK4_GAS_URL: ${{ vars.LTK4_GAS_URL }}
         run: |
@@ -84,17 +84,47 @@ jobs:
             sheets: selectLtk4Sheets(sitePayload)
           }));
 
-          // LIVE snapshot is retained unchanged; site LIVE updates are disabled.
+          try {
+            const livePayload = await fetchJsonp("live");
+            if (!livePayload.ok || livePayload.seasonId !== "LTK4" || livePayload.sourceSpreadsheetId !== LTK4_BOOK) {
+              throw new Error(livePayload.error || "Invalid live data payload");
+            }
+            fs.writeFileSync("live-data.json", JSON.stringify({
+              ok: true,
+              seasonId: "LTK4",
+              sourceSpreadsheetId: LTK4_BOOK,
+              updatedAt: livePayload.updatedAt || null,
+              configured: Boolean(livePayload.configured),
+              streams: livePayload.streams || []
+            }));
+          } catch (error) {
+            console.warn(`LIVE update skipped: ${error.message}`);
+            let existingLive;
+            try { existingLive = JSON.parse(fs.readFileSync("live-data.json", "utf8")); } catch {}
+            if (existingLive?.ok && existingLive.seasonId === "LTK4" && existingLive.sourceSpreadsheetId === LTK4_BOOK) {
+              fs.writeFileSync("live-data.json", JSON.stringify({ ...existingLive, stale: true, error: "LIVE refresh unavailable" }));
+            } else {
+              fs.writeFileSync("live-data.json", JSON.stringify({
+                ok: true,
+                seasonId: "LTK4",
+                sourceSpreadsheetId: LTK4_BOOK,
+                updatedAt: null,
+                configured: false,
+                streams: [],
+                error: error.message
+              }));
+            }
+          }
           NODE
 
       - name: Commit updated data
         run: |
-          if git diff --quiet -- site-data.json; then
+          if git diff --quiet -- site-data.json live-data.json; then
             echo "No data changes."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site-data.json
+          git add site-data.json live-data.json
           git commit -m "Update site data"
           git push

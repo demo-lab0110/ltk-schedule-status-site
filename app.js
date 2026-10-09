@@ -1,6 +1,6 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261009-static-live";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-live-restored";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -72,12 +72,14 @@ let schedules = [];
 let scrimResults = [];
 let teams = {};
 let liveStreams = [];
+let liveConfigured = false;
 let clipVideos = [];
 let twitchClips = [];
 let siteNews = [];
 let watchedClipIds = readWatchedClipIds();
 let watchedTwitchClipIds = readWatchedTwitchClipIds();
 let likedTwitchClipIds = readLikedTwitchClipIds();
+let liveTimer = null;
 let dataTimer = null;
 let dialogBackStack = [];
 let currentDialogView = null;
@@ -170,7 +172,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await hydrateData();
   await hydrateLiveStreams();
   startDataRefresh();
-
+  startLiveRefresh();
   applyCalendarMode();
   render();
   trackVirtualPageView(routeForState());
@@ -190,7 +192,7 @@ function setupHeaderEnhancements() {
     const status = document.createElement("div");
     status.id = "headerStatus";
     status.className = "header-status";
-    status.textContent = "LIVE更新停止中 / 本日の試合 --件 / 最終更新 --";
+    status.textContent = "LIVE配信中 --件 / 本日の試合 --件 / 最終更新 --";
     const dataSourceRow = intro.querySelector(".data-source-row");
     const dataStatus = intro.querySelector("#dataSourceStatus");
     (dataSourceRow || dataStatus || title)?.after(status);
@@ -298,21 +300,29 @@ function populateTeamFilter() {
 async function hydrateLiveStreams(options = {}) {
   if (!elements.liveNowList) return;
   try {
-    if (elements.liveNowStatus) elements.liveNowStatus.textContent = "保存済み配信情報を読み込み中";
+    if (elements.liveNowStatus) elements.liveNowStatus.textContent = "LTK参加者の配信を確認中";
     const payload = await loadLiveStreams(options);
     liveStreams = payload.streams || [];
+    liveConfigured = Boolean(payload.configured);
     if (elements.liveNowStatus) {
-      elements.liveNowStatus.textContent = `LIVE更新停止中 / 保存データ確認時刻 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "不明"}`;
+      elements.liveNowStatus.textContent = payload.configured
+        ? `確認できたLOL配信 ${liveStreams.length}件（取得範囲内）`
+        : "配信状況をまだ取得していません";
     }
   } catch (error) {
     console.error("Live streams load failed.", error);
     liveStreams = [];
-    if (elements.liveNowStatus) elements.liveNowStatus.textContent = "保存済み配信情報を読み込めませんでした";
+    liveConfigured = false;
+    if (elements.liveNowStatus) elements.liveNowStatus.textContent = "LIVE NOWを取得できませんでした";
   }
   renderLiveNow();
   renderHeaderStatus();
 }
 
+function startLiveRefresh() {
+  if (liveTimer) window.clearInterval(liveTimer);
+  liveTimer = window.setInterval(() => hydrateLiveStreams(), 5 * 60 * 1000);
+}
 
 function startDataRefresh() {
   if (dataTimer) window.clearInterval(dataTimer);
@@ -760,10 +770,11 @@ function markUpdated() {
 
 function renderHeaderStatus() {
   if (!elements.headerStatus) return;
+  const liveCount = liveConfigured && Number.isFinite(liveStreams.length) ? liveStreams.length : null;
   const today = japanDateKey();
   const todayMatchCount = allCalendarItems().filter((item) => item.date === today).length;
   const updated = state.lastUpdatedAt ? japanTimeLabel(state.lastUpdatedAt) : "--";
-  elements.headerStatus.textContent = `LIVE更新停止中 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
+  elements.headerStatus.textContent = `LIVE配信中 ${liveCount ?? "--"}件 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
 }
 
 function renderClips() {
@@ -1251,7 +1262,7 @@ function applyFilterPanelState() {
 function renderLiveNow() {
   if (!elements.liveNowList) return;
   if (!liveStreams.length) {
-    elements.liveNowList.innerHTML = `<p class="live-empty">現在の配信状況は更新していません</p>`;
+    elements.liveNowList.innerHTML = `<p class="live-empty">${liveConfigured ? "取得範囲内ではLOL配信を確認できていません" : "配信情報の準備中"}</p>`;
     return;
   }
   elements.liveNowList.replaceChildren(...liveStreams.map(liveNowCard));
