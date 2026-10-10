@@ -261,6 +261,16 @@ function buildScrimResults(rows, teamRows, lookup) {
     });
 }
 
+function readCs14(row) {
+  const value = optionalNumberValue(row["14分CS"]);
+  const observedSeconds = Number(row["計測秒"]);
+  // Owner-approved M3 values are already floor(observed CS * 840 / 841).
+  // Keep 841 as the observation time and never convert the stored value again.
+  const approvedConversion = clean(row["試合ID"]) === "SCRIM_20261010_CORE_CC_LISTENERS_003"
+    && observedSeconds === 841 && Number.isSafeInteger(value);
+  return value != null && value >= 0 && (observedSeconds === 840 || approvedConversion) ? value : null;
+}
+
 function buildPlayerMatches(rows, teamRows, lookup) {
   return rows
     .filter((row) => clean(row["試合ID"]) && (clean(row["プレイヤー名"]) || clean(row["サモナーネーム"]) || clean(row["チャンピオン名"])))
@@ -280,7 +290,7 @@ function buildPlayerMatches(rows, teamRows, lookup) {
         assists: numberValue(row.A),
         damage: numberValue(row["ダメージ"]),
         cs15: optionalNumberValue(row["15分CS"]),
-        cs14: Number(row["計測秒"]) === 840 && optionalNumberValue(row["14分CS"]) >= 0 ? optionalNumberValue(row["14分CS"]) : null,
+        cs14: readCs14(row),
         gold: numberValue(row["ゴールド"])
       };
     });
