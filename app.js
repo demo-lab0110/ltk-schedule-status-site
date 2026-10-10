@@ -1824,7 +1824,7 @@ function resultSummary(item) {
       button.innerHTML = `
         <span>Game${index + 1}</span>
         <strong>WIN ${winnerDisplayName(result)}</strong>
-        <small>${result.time} / ${result.leftKda} - ${result.rightKda}</small>
+        <small>${formatMatchDurationLabel(result.time)} / ${result.leftKda} - ${result.rightKda}</small>
         <em>クリックして詳細を表示</em>
       `;
       button.addEventListener("click", () => renderGameDetail(section, result));
@@ -1839,7 +1839,7 @@ function resultSummary(item) {
   }
   section.innerHTML = `
     <div><span>勝利</span><strong>${item.winner}</strong></div>
-    <div><span>試合時間</span><strong>${item.time}</strong></div>
+    <div><span>試合時間</span><strong>${formatMatchDurationLabel(item.time)}</strong></div>
     <div><span>KDA</span><strong>${item.leftKda} / ${item.rightKda}</strong></div>
     <div><span>Gold</span><strong>${formatNumber(item.leftGold)} / ${formatNumber(item.rightGold)}</strong></div>
     <div><span>最大DMG</span><strong>${item.carry} ${formatNumber(item.maxDamage)}</strong></div>
@@ -1892,6 +1892,12 @@ function bpFlowTable(result, rows) {
 
 function bpFlowTeamRow(result, rows, teamKey) {
   const cells = draftActionsForTeam(result, rows, teamKey);
+  let previousColumn = 0;
+  const cellHtml = cells.map((item) => {
+    const column = Math.max(item.order, previousColumn + 1);
+    previousColumn = column;
+    return bpFlowCell(item, column);
+  }).join("");
   const title = teamKey === VIEWER_TEAM_KEY ? VIEWER_OPPONENT_LABEL : teamShortName(teamKey);
   return `
     <div class="bp-flow-row" style="--team:${teams[teamKey]?.accent || "#14b8a6"}">
@@ -1900,7 +1906,7 @@ function bpFlowTeamRow(result, rows, teamKey) {
         <strong>${title}</strong>
       </div>
       <div class="bp-flow-cells">
-        ${cells.length ? cells.map(bpFlowCell).join("") : `<span class="bp-flow-empty">BPデータなし</span>`}
+        ${cells.length ? cellHtml : `<span class="bp-flow-empty">BPデータなし</span>`}
       </div>
     </div>
   `;
@@ -1950,9 +1956,9 @@ function draftSideForTeam(result, teamKey) {
   return teamKey === result.left ? "BLUE" : "RED";
 }
 
-function bpFlowCell(item) {
+function bpFlowCell(item, column = item.order) {
   return `
-    <span class="bp-flow-cell is-${item.type.toLowerCase()}" style="grid-column:${item.order}" title="${item.type}: ${item.champion}${item.detail ? ` / ${item.detail}` : ""}">
+    <span class="bp-flow-cell is-${item.type.toLowerCase()}" style="grid-column:${column};grid-row:1" title="${item.type}: ${item.champion}${item.detail ? ` / ${item.detail}` : ""}">
       ${champIcon(item.champion)}
       <small>${item.label}</small>
     </span>
@@ -3847,6 +3853,13 @@ function competitivePlayerMatches() {
 function matchDurationMinutes(matchId) {
   const match = scrimResults.find((row) => row.id === matchId);
   return parseMatchDurationMinutes(match?.time);
+}
+
+function formatMatchDurationLabel(value) {
+  const minutes = parseMatchDurationMinutes(value);
+  if (minutes === null || minutes < 0) return String(value ?? "").trim();
+  const seconds = Math.round(minutes * 60);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function parseMatchDurationMinutes(value) {
