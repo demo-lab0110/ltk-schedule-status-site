@@ -1,4 +1,6 @@
 import { selectLtk4Sheets } from "./ltk4-selection.mjs";
+import { resolveCoachAssignments } from "./coach-assignment-model.mjs";
+import { coachAssignments } from "./ltk4-coaches.mjs";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
@@ -35,6 +37,8 @@ export async function loadSiteData(options = {}) {
   const twitchClipRows = sheets["Twitchクリップ一覧"] || [];
   const newsRows = sheets["サイト_NEWS"] || [];
   const lookup = buildTeamLookup(teamRows);
+  const participants = buildParticipants(profileRows, teamRows, lookup);
+  const coaches = resolveCoachAssignments(participants, coachAssignments, coachAssignments);
 
   return {
     updatedAt: clean(source.updatedAt),
@@ -42,7 +46,8 @@ export async function loadSiteData(options = {}) {
     teams: buildTeams(teamRows),
     schedules: buildSchedules(scheduleRows),
     scrimResults: buildScrimResults(resultRows, teamRows, lookup),
-    participants: buildParticipants(profileRows, teamRows, lookup),
+    participants,
+    coaches,
     playerMatches: buildPlayerMatches(playerRows, teamRows, lookup),
     bpRows: buildBpRows(bpSourceRows, teamRows, lookup),
     championIcons: buildChampionIcons(championRows),

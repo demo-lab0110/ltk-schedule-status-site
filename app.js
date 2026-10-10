@@ -1,6 +1,6 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-live-freshness";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-coach-duties";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -67,6 +67,7 @@ const clipSourceToHash = {
 let bpRows = [];
 let championIcons = {};
 let participants = [];
+let coaches = [];
 let playerMatches = [];
 let schedules = [];
 let scrimResults = [];
@@ -272,6 +273,7 @@ function applyData(data) {
   bpRows = data.bpRows || [];
   championIcons = data.championIcons || {};
   participants = data.participants || [];
+  coaches = data.coaches || [];
   playerMatches = data.playerMatches || [];
   schedules = data.schedules || [];
   scrimResults = data.scrimResults || [];
@@ -4224,12 +4226,21 @@ function renderParticipantDirectory() {
     if(logo&&/^\.\/image\/(dd|cc|it|lr)_emblem\.png$/.test(logo)){const image=document.createElement("img");image.src=logo;image.alt="";image.className="roster-team-logo";heading.append(image);}
     const title=document.createElement("span");title.textContent=teams[group.team]?.name||group.team;
     const count=document.createElement("small");count.textContent=group.count+"名";heading.append(title,count);section.append(heading);
-    for(const tier of group.tiers){const subsection=document.createElement("section");subsection.className="roster-tier-section";const subheading=document.createElement("h3");subheading.textContent=tier.tier;const grid=document.createElement("div");grid.className="roster-tier-grid";grid.append(...tier.players.map(participantDirectoryCard));subsection.append(subheading,grid);section.append(subsection);}
+    for(const tier of group.tiers){
+      const subsection=document.createElement("section");subsection.className="roster-tier-section";
+      const subheading=document.createElement("h3");subheading.textContent=tier.tier;
+      const grid=document.createElement("div");grid.className="roster-tier-grid";
+      grid.append(...tier.players.map(person=>participantDirectoryCard(person)));
+      const keyword=String(state.keyword||"").toLowerCase();
+      const duties=coaches.filter(duty=>duty.team===group.team&&duty.tier===tier.tier&&(!keyword||(duty.player.name+" "+duty.team+" コーチ").toLowerCase().includes(keyword)));
+      grid.append(...duties.map(duty=>participantDirectoryCard(duty.player,duty)));
+      subsection.append(subheading,grid);section.append(subsection);
+    }
     return section;
   }));
   if(!groups.length){const empty=document.createElement("p");empty.className="news-empty";empty.textContent="条件に一致する参加者はいません";container.append(empty);}
 }
-function participantDirectoryCard(person){
+function participantDirectoryCard(person, coachDuty = null){
     const card = document.createElement("article");
     card.className = "participant-card roster-card";
     const avatar = document.createElement("div");
@@ -4239,7 +4250,9 @@ function participantDirectoryCard(person){
     else { const initial=document.createElement("span"); initial.textContent=person.name.slice(0,1); avatar.append(initial); }
     const meta=document.createElement("div"); meta.className="participant-meta";
     const name=document.createElement("strong"); name.textContent=person.name;
-    const detail=document.createElement("span"); detail.textContent=teamShortName(person.team)+" / "+person.tier+" / "+person.role;
+    const detail=document.createElement("span"); detail.textContent=coachDuty
+      ? teamShortName(coachDuty.team)+" / "+coachDuty.tier+" / コーチ"
+      : teamShortName(person.team)+" / "+person.tier+" / "+person.role;
     meta.append(name,detail);
     const links=document.createElement("div"); links.className="links";
     for (const [label,url,image] of [["X",person.x,"X.png"],["YouTube",person.youtube,"Youtube.png"],["Twitch",person.twitch,"Twitch.png"]]) {
