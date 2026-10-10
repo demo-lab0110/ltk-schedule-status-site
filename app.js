@@ -307,10 +307,8 @@ async function hydrateLiveStreams(options = {}) {
     liveStreams = payload.streams || [];
     liveConfigured = Boolean(payload.configured) && !payload.stale;
     if (elements.liveNowStatus) {
-      elements.liveNowStatus.textContent = payload.stale
-        ? `最終確認時点の情報 ${liveStreams.length}件（${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "確認時刻不明"}・現在の配信状況は未確認）`
-        : payload.configured
-        ? `取得済み配信情報 ${liveStreams.length}件（最終確認時点・取得範囲内）`
+      elements.liveNowStatus.textContent = payload.configured || liveStreams.length
+        ? `取得済み配信情報 ${liveStreams.length}件（最終更新 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "確認時刻不明"}）。最終確認時点の情報です。現在の配信状況は未確認で、配信ごとの確認日時は異なる場合があります。`
         : "配信状況をまだ取得していません";
     }
   } catch (error) {
@@ -1289,7 +1287,6 @@ function liveNowCard(stream) {
       </div>
     </div>
     <p class="live-title">${escapeAttr(stream.streamTitle || "League of Legends")}</p>
-    <p class="live-confirmed">最終確認時点の情報<br>${escapeAttr(new Date(stream.verifiedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }))} JST${stream.snapshot ? "<br>現在の配信状況は未確認" : ""}</p>
     <span class="live-link">${stream.platform === "youtube" ? "YouTube" : "Twitch"}で見る</span>
   `;
   card.addEventListener("click", () => {

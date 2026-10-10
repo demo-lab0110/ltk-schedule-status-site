@@ -43,14 +43,27 @@ test('explicit exporter stale flag makes even recently verified cards snapshots'
     assert.equal((await loadLiveStreams()).streams[0].snapshot,true);
   }finally{Date.now=realNow;}
 });
-test('actual card rendering shows JST observation time and unconfirmed notice for old data',()=>{
+test('card rendering restores original contents without observation paragraphs',()=>{
   const src=fs.readFileSync('app.js','utf8');
   const start=src.indexOf('function liveNowCard(stream) {'),end=src.indexOf('\nfunction liveTeamMark',start);
   const card={style:{setProperty(){}},addEventListener(){}};
   const ctx=vm.createContext({Date,teams:{},document:{createElement:()=>card},liveTeamMark:()=>'',trackAnalyticsEvent(){},escapeAttr:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;')});
   vm.runInContext(src.slice(start,end),ctx);
   const actual=ctx.liveNowCard({name:'test',streamUrl:'https://www.twitch.tv/test',streamTitle:'<title>',verifiedAt:'2026-10-10T08:00:00Z',snapshot:true});
-  assert.match(actual.innerHTML,/最終確認時点の情報/);assert.match(actual.innerHTML,/17:00:00 JST/);
-  assert.match(actual.innerHTML,/現在の配信状況は未確認/);assert.match(actual.innerHTML,/&lt;title&gt;/);
+  assert.doesNotMatch(actual.innerHTML,/live-confirmed|最終確認時点の情報|JST|現在の配信状況は未確認/);
+  assert.match(actual.innerHTML,/&lt;title&gt;/);assert.match(actual.innerHTML,/Twitchで見る/);
   assert.doesNotMatch(actual.innerHTML,/LIVE配信中/);
+});
+
+test('list heading shows JST update time and unconfirmed notice for fresh and stale snapshots',async()=>{
+  const src=fs.readFileSync('app.js','utf8');
+  const start=src.indexOf('async function hydrateLiveStreams(options = {}) {'),end=src.indexOf('\nfunction ',start);
+  for(const stale of [false,true]){
+    const status={};
+    const ctx=vm.createContext({Date,console,elements:{liveNowList:{},liveNowStatus:status},loadLiveStreams:async()=>({...base,stale,streams:[{name:'test'}]}),renderLiveNow(){},renderHeaderStatus(){}});
+    vm.runInContext(src.slice(start,end),ctx);await ctx.hydrateLiveStreams();
+    assert.match(status.textContent,/取得済み配信情報 1件/);assert.match(status.textContent,/17:00:00 JST/);
+    assert.match(status.textContent,/最終確認時点の情報/);assert.match(status.textContent,/現在の配信状況は未確認/);
+    assert.doesNotMatch(status.textContent,/LIVE配信中/);
+  }
 });
