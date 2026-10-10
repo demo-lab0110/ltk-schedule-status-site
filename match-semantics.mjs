@@ -67,6 +67,21 @@ export function draftPosition(row, sourceOrdinal, orderKind = '') {
     positionBasis: globalOrder !== null ? '全体BP順' : column !== null ? 'チーム内順から標準配置' : '順番不明'
   };
 }
+export function hasKnownBpFlow(rows, teamKeys) {
+  if (rows.length !== 20 || teamKeys.length !== 2 || new Set(teamKeys).size !== 2) return false;
+  const orders = new Set(), sides = new Map();
+  for (const row of rows) {
+    const slots = DRAFT_COLUMNS[row.side]?.[row.type];
+    if (!teamKeys.includes(row.team) || row.orderScope !== 'GLOBAL'
+      || !slots?.includes(row.globalOrder) || row.column !== row.globalOrder
+      || orders.has(row.globalOrder) || (!row.champion && !row.noBan)
+      || (row.noBan && row.type !== 'BAN')) return false;
+    if (sides.has(row.team) && sides.get(row.team) !== row.side) return false;
+    orders.add(row.globalOrder);
+    sides.set(row.team, row.side);
+  }
+  return orders.size === 20 && sides.size === 2 && new Set(sides.values()).size === 2;
+}
 export function matchRecordLabel(item) {
   const wins = item.wins || 0, losses = item.losses || 0, unknown = item.unknownResults || 0;
   return `${wins}-${losses}${unknown ? ` / 不明${unknown}` : ''}`;

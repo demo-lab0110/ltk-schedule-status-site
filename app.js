@@ -1,5 +1,5 @@
 import { groupParticipants } from "./participant-groups.mjs";
-import { recordMatchResult, matchRecordLabel, matchWinRate } from "./match-semantics.mjs";
+import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
 ﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-match-semantics";
 
@@ -1870,7 +1870,8 @@ function gameDetailTitle(result) {
 
 function bpFlowTable(result, rows) {
   const teamsForRows = [result.left, result.right].filter(Boolean);
-  if (!teamsForRows.length) return "";
+  const actions = bpRows.filter(row => row.matchId === result.id);
+  if (!hasKnownBpFlow(actions, teamsForRows)) return "";
   return `
     <section class="bp-flow">
       <h4>BP Flow</h4>
