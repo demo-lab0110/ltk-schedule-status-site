@@ -1,6 +1,7 @@
 import { selectLtk4Sheets } from "./ltk4-selection.mjs";
 import { resolveCoachAssignments } from "./coach-assignment-model.mjs";
 import { coachAssignments } from "./ltk4-coaches.mjs";
+import { normalizeMatchResult, matchTierFromSchedule, childMatchTier, draftPosition } from "./match-semantics.mjs";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
@@ -39,17 +40,20 @@ export async function loadSiteData(options = {}) {
   const lookup = buildTeamLookup(teamRows);
   const participants = buildParticipants(profileRows, teamRows, lookup);
   const coaches = resolveCoachAssignments(participants, coachAssignments, coachAssignments);
+  const schedules = buildSchedules(scheduleRows);
+  const scrimResults = buildScrimResults(resultRows, teamRows, lookup, schedules);
+  const matchContexts = new Map(scrimResults.map(row => [row.id, row]));
 
   return {
     updatedAt: clean(source.updatedAt),
     cached: Boolean(source.cached),
     teams: buildTeams(teamRows),
-    schedules: buildSchedules(scheduleRows),
-    scrimResults: buildScrimResults(resultRows, teamRows, lookup),
+    schedules,
+    scrimResults,
     participants,
     coaches,
-    playerMatches: buildPlayerMatches(playerRows, teamRows, lookup),
-    bpRows: buildBpRows(bpSourceRows, teamRows, lookup),
+    playerMatches: buildPlayerMatches(playerRows, teamRows, lookup, matchContexts),
+    bpRows: buildBpRows(bpSourceRows, teamRows, lookup, matchContexts),
     championIcons: buildChampionIcons(championRows),
     clipVideos: buildClipVideos(clipRows, teamRows, lookup),
     twitchClips: buildTwitchClips(twitchClipRows, teamRows, lookup),
@@ -211,7 +215,7 @@ function buildParticipants(rows, teamRows, lookup) {
     .filter((row) => row.team && row.name);
 }
 
-function buildScrimResults(rows, teamRows, lookup) {
+function buildScrimResults(rows, teamRows, lookup, schedules) {
   return rows
     .filter((row) => clean(row["試合ID"]))
     .map((row) => {
@@ -232,7 +236,7 @@ function buildScrimResults(rows, teamRows, lookup) {
         match: `G${clean(row["試合番号"])}`,
         type: viewerMatch ? "対視聴者" : `${matchKind}結果`,
         stage: "RESULT",
-        tier: tierFrom(rawLeft, rawRight),
+        tier: matchTierFromSchedule(row, schedules),
         left: isViewerTeamName(rawLeft) ? VIEWER_TEAM_KEY : left,
         right: isViewerTeamName(rawRight) ? VIEWER_TEAM_KEY : right,
         leftLabel: compactTeamName(rawLeft),
@@ -271,20 +275,27 @@ function readCs14(row) {
   return value != null && value >= 0 && (observedSeconds === 840 || approvedConversion) ? value : null;
 }
 
-function buildPlayerMatches(rows, teamRows, lookup) {
+function buildPlayerMatches(rows, teamRows, lookup, matchContexts) {
   return rows
     .filter((row) => clean(row["試合ID"]) && (clean(row["プレイヤー名"]) || clean(row["サモナーネーム"]) || clean(row["チャンピオン名"])))
     .map((row) => {
       const rawTeam = row["チーム名"];
+      const team = isViewerTeamName(rawTeam) ? VIEWER_TEAM_KEY : resolveTeam(rawTeam, teamRows, lookup) || compactTeamName(rawTeam);
+      const context = matchContexts.get(clean(row["試合ID"]));
+      const result = normalizeMatchResult(row["勝敗"]);
+      const expected = context?.winner && [context.left, context.right].includes(context.winner) && [context.left, context.right].includes(team) ? (context.winner === team ? "WIN" : "LOSE") : "UNKNOWN";
+      const resultConflict = result !== "UNKNOWN" && expected !== "UNKNOWN" && result !== expected;
       return {
         matchId: clean(row["試合ID"]),
-        team: isViewerTeamName(rawTeam) ? VIEWER_TEAM_KEY : resolveTeam(rawTeam, teamRows, lookup) || compactTeamName(rawTeam),
-        tier: tierFrom(rawTeam),
+        team,
+        tier: childMatchTier(row, matchContexts.get(clean(row["試合ID"]))),
+        side: clean(row["サイド"]).toUpperCase(),
         role: clean(row["ロール"]).toUpperCase(),
         name: clean(row["プレイヤー名"]),
         summoner: clean(row["サモナーネーム"]),
         champion: clean(row["チャンピオン名"]),
-        result: clean(row["勝敗"]).toUpperCase(),
+        result: resultConflict ? "UNKNOWN" : result,
+        resultConflict,
         kills: numberValue(row.K),
         deaths: numberValue(row.D),
         assists: numberValue(row.A),
@@ -296,24 +307,30 @@ function buildPlayerMatches(rows, teamRows, lookup) {
     });
 }
 
-function buildBpRows(rows, teamRows, lookup) {
+function buildBpRows(rows, teamRows, lookup, matchContexts) {
+  const ordinals = new Map();
   return rows
     .map((row) => {
       const rawTeam = row["チーム名"];
       const type = clean(row["種別"]).toUpperCase();
+      const key = `${clean(row["試合ID"])}__${clean(rawTeam)}__${type}`;
+      const sourceOrdinal = (ordinals.get(key) || 0) + 1;
+      ordinals.set(key, sourceOrdinal);
       return {
         matchId: clean(row["試合ID"]),
         team: isViewerTeamName(rawTeam) ? VIEWER_TEAM_KEY : resolveTeam(rawTeam, teamRows, lookup) || compactTeamName(rawTeam),
         side: clean(row["サイド"]).toUpperCase(),
-        tier: tierFrom(rawTeam),
+        tier: childMatchTier(row, matchContexts.get(clean(row["試合ID"]))),
         type,
         bpOrder: numberValue(row["BP順"]),
+        ...draftPosition(row, sourceOrdinal),
+        noBan: type === "BAN" && isNoBanChampion(row["BAN/PICK集計用名"] || row["チャンピオン名"]),
         phase: clean(row["フェーズ"]),
         role: clean(row["ロール"]).toUpperCase(),
         champion: clean(row["BAN/PICK集計用名"]) || clean(row["チャンピオン名"])
       };
     })
-    .filter((row) => row.matchId && row.champion && !isNoBanChampion(row.champion) && (row.type === "BAN" || row.type === "PICK"));
+    .filter((row) => row.matchId && row.champion && (row.type === "BAN" || row.type === "PICK"));
 }
 
 function buildChampionIcons(rows) {
@@ -469,6 +486,7 @@ function resolveTeam(value, teamRows, lookup) {
     const fullName = clean(row.team_name);
     const compactName = compactTeamName(fullName);
     if ((fullName && raw.includes(fullName)) || (compactName && compact.includes(compactName))) return key;
+    if (key && new RegExp(`(?:^|[\\s_/\\-])${key}(?:$|[\\s_/\\-])`, "i").test(raw)) return key;
   }
 
   return TEAM_LOGOS[raw] ? raw : "";

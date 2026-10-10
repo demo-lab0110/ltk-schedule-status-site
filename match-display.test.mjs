@@ -22,7 +22,7 @@ test('actual LR/DD game times display minutes:seconds without changing stored du
   assert.match(source,/formatMatchDurationLabel\(item.time\)/);
 });
 
-test('actual Game2 BP collisions stay in one row with unchanged contents and sequence; Game3 positions remain',()=>{
+test('actual Game2 and Game3 use standard side/type columns and retain NOBAN slots',()=>{
   for(const game of ['002','003']){
     const result=data.scrimResults.find(r=>r.id===`SCRIM_20261009_CORE_LR_DD_${game}`);
     for(const team of [result.left,result.right]){
@@ -36,9 +36,19 @@ test('actual Game2 BP collisions stay in one row with unchanged contents and seq
       assert.ok(columns.every((n,i)=>!i||n>columns[i-1]));
       assert.equal(JSON.stringify(actions),before);
       const titles=[...html.matchAll(/title="([^\"]+)"/g)].map(m=>m[1]);
-      assert.deepEqual(titles,Array.from(actions,a=>`${a.type}: ${a.champion}${a.detail?` / ${a.detail}`:''}`));
-      if(game==='003')assert.deepEqual(columns,Array.from(actions,a=>a.order));
-      else assert.ok(new Set(actions.map(a=>a.order)).size<actions.length,'fixture reproduces overlapping grid columns');
+      assert.deepEqual(titles,Array.from(actions,a=>`${a.type}: ${a.champion}${a.detail?` / ${a.detail}`:''} / ${a.positionBasis}`));
+      assert.deepEqual(columns,Array.from(actions,a=>a.order));
+      const picks=Array.from(actions).filter(a=>a.type==='PICK');
+      const bans=Array.from(actions).filter(a=>a.type==='BAN');
+      assert.equal(picks.length,5);assert.equal(bans.length,5);
+      const side=data.bpRows.find(r=>r.matchId===result.id&&r.team===team).side;
+      const expected=side==='BLUE'?{BAN:[1,3,5,14,16],PICK:[7,10,11,18,19]}:{BAN:[2,4,6,13,15],PICK:[8,9,12,17,20]};
+      assert.deepEqual(picks.map(a=>a.order),expected.PICK);assert.deepEqual(bans.map(a=>a.order),expected.BAN);
+      if(team==='DD'){
+        const empty=actions.find(a=>a.noBan);assert.ok(empty);
+        assert.equal(empty.label,game==='002'?'B2':'B3');assert.equal(empty.order,game==='002'?4:5);
+        assert.match(html,/aria-label="BANなし"/);
+      }
     }
   }
 });

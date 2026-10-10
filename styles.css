@@ -3379,6 +3379,10 @@ th {
   padding: 8px 10px;
 }
 
+.bp-flow-content { min-width: 0; }
+.bp-flow-unknown { display: flex; align-items: center; gap: 12px; padding: 8px 10px; overflow-x: auto; }
+.bp-flow-cell.is-no-ban .champ-fallback { border: 1px dashed var(--line); background: transparent; }
+
 .bp-flow-cell {
   position: relative;
   display: grid;
