@@ -308,9 +308,9 @@ async function hydrateLiveStreams(options = {}) {
     liveConfigured = Boolean(payload.configured) && !payload.stale;
     if (elements.liveNowStatus) {
       elements.liveNowStatus.textContent = payload.stale
-        ? `配信情報の更新待ち（最終確認 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "不明"}）`
+        ? `最終確認時点の情報 ${liveStreams.length}件（${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "確認時刻不明"}・現在の配信状況は未確認）`
         : payload.configured
-        ? `確認できたLOL配信 ${liveStreams.length}件（取得範囲内）`
+        ? `取得済み配信情報 ${liveStreams.length}件（最終確認時点・取得範囲内）`
         : "配信状況をまだ取得していません";
     }
   } catch (error) {
@@ -774,11 +774,11 @@ function markUpdated() {
 
 function renderHeaderStatus() {
   if (!elements.headerStatus) return;
-  const liveCount = liveConfigured && Number.isFinite(liveStreams.length) ? liveStreams.length : null;
+  const liveCount = liveStreams.length || (liveConfigured ? 0 : null);
   const today = japanDateKey();
   const todayMatchCount = allCalendarItems().filter((item) => item.date === today).length;
   const updated = state.lastUpdatedAt ? japanTimeLabel(state.lastUpdatedAt) : "--";
-  elements.headerStatus.textContent = `LIVE配信中 ${liveCount ?? "--"}件 / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
+  elements.headerStatus.textContent = `配信情報 ${liveCount ?? "--"}件（最終確認時点） / 本日の試合 ${todayMatchCount ?? "--"}件 / 最終更新 ${updated}`;
 }
 
 function renderClips() {
@@ -1289,6 +1289,7 @@ function liveNowCard(stream) {
       </div>
     </div>
     <p class="live-title">${escapeAttr(stream.streamTitle || "League of Legends")}</p>
+    <p class="live-confirmed">最終確認時点の情報<br>${escapeAttr(new Date(stream.verifiedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }))} JST${stream.snapshot ? "<br>現在の配信状況は未確認" : ""}</p>
     <span class="live-link">${stream.platform === "youtube" ? "YouTube" : "Twitch"}で見る</span>
   `;
   card.addEventListener("click", () => {

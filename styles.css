@@ -975,6 +975,13 @@ body.filter-collapsed .filter-panel {
   -webkit-box-orient: vertical;
 }
 
+.live-confirmed {
+  margin: 0;
+  color: var(--muted, #b5b5b5);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .live-link {
   color: #c084fc;
   font-size: 0.78rem;

@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {loadLiveStreams} from './sheet-loader.js';
+
+const now=Date.parse('2026-10-10T09:00:00Z');
+const book='1ZnAbrmXoNykWtMwMKZzF_-2HyNnDd6MMH3b-amKDZKc';
+const base={ok:true,seasonId:'LTK4',sourceSpreadsheetId:book,updatedAt:'2026-10-10T08:00:00Z',configured:true};
+function setup(payload){
+  const saved=new Map();
+  globalThis.window={location:{href:'http://localhost/'},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)}};
+  globalThis.fetch=async()=>({ok:true,json:async()=>payload});
+  return saved;
+}
+test('old acquired streams remain timestamped snapshots; invalid/future/unsafe entries stay rejected',async()=>{
+  const realNow=Date.now;Date.now=()=>now;
+  try{
+    setup({...base,streams:[
+      {name:'old',platform:'twitch',streamUrl:'https://www.twitch.tv/old',verifiedAt:'2026-10-10T08:00:00Z'},
+      {name:'future',platform:'youtube',streamUrl:'https://www.youtube.com/watch?v=future',verifiedAt:'2026-10-10T10:00:00Z'},
+      {name:'invalid',streamUrl:'https://www.twitch.tv/invalid',verifiedAt:'unknown'},
+      {name:'unsafe',streamUrl:'javascript:alert(1)',verifiedAt:'2026-10-10T08:00:00Z'}
+    ]});
+    const p=await loadLiveStreams();
+    assert.equal(p.streams.length,1);assert.equal(p.streams[0].snapshot,true);
+    assert.equal(p.streams[0].verifiedAt,'2026-10-10T08:00:00Z');assert.equal(p.stale,true);
+  }finally{Date.now=realNow;}
+});
+test('network failure preserves last acquired cards and marks cache unconfirmed, without GAS fallback',async()=>{
+  const realNow=Date.now;Date.now=()=>now;
+  try{
+    setup({...base,updatedAt:'2026-10-10T08:59:00Z',streams:[{name:'cached',platform:'youtube',streamUrl:'https://www.youtube.com/watch?v=known',verifiedAt:'2026-10-10T08:59:00Z'}]});
+    assert.equal((await loadLiveStreams()).streams[0].snapshot,false);
+    globalThis.fetch=async url=>{assert.equal(new URL(url).pathname,'/live-data.json');throw Error('network unavailable');};
+    const p=await loadLiveStreams();assert.equal(p.streams[0].name,'cached');assert.equal(p.streams[0].snapshot,true);assert.equal(p.stale,true);
+  }finally{Date.now=realNow;}
+});
+test('explicit exporter stale flag makes even recently verified cards snapshots',async()=>{
+  const realNow=Date.now;Date.now=()=>now;
+  try{
+    setup({...base,stale:true,updatedAt:'2026-10-10T08:59:00Z',streams:[{streamUrl:'https://www.twitch.tv/player',platform:'twitch',verifiedAt:'2026-10-10T08:59:00Z'}]});
+    assert.equal((await loadLiveStreams()).streams[0].snapshot,true);
+  }finally{Date.now=realNow;}
+});
+test('actual card rendering shows JST observation time and unconfirmed notice for old data',()=>{
+  const src=fs.readFileSync('app.js','utf8');
+  const start=src.indexOf('function liveNowCard(stream) {'),end=src.indexOf('\nfunction liveTeamMark',start);
+  const card={style:{setProperty(){}},addEventListener(){}};
+  const ctx=vm.createContext({Date,teams:{},document:{createElement:()=>card},liveTeamMark:()=>'',trackAnalyticsEvent(){},escapeAttr:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;')});
+  vm.runInContext(src.slice(start,end),ctx);
+  const actual=ctx.liveNowCard({name:'test',streamUrl:'https://www.twitch.tv/test',streamTitle:'<title>',verifiedAt:'2026-10-10T08:00:00Z',snapshot:true});
+  assert.match(actual.innerHTML,/最終確認時点の情報/);assert.match(actual.innerHTML,/17:00:00 JST/);
+  assert.match(actual.innerHTML,/現在の配信状況は未確認/);assert.match(actual.innerHTML,/&lt;title&gt;/);
+  assert.doesNotMatch(actual.innerHTML,/LIVE配信中/);
+});

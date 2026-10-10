@@ -70,7 +70,7 @@ export async function loadLiveStreams(options = {}) {
     return liveData;
   } catch (error) {
     const cached = readCache(LIVE_CACHE_KEY);
-    if (cached) return normalizeLivePayload(cached);
+    if (cached) return normalizeLivePayload({ ...cached, stale: true });
     throw error;
   }
 }
@@ -106,8 +106,7 @@ function normalizeLivePayload(payload) {
   return {
     streams: (payload.streams || []).filter((item) => {
       const checked = Date.parse(item.verifiedAt || payload.updatedAt);
-      const limit = item.platform === "youtube" ? 45 * 60 * 1000 : 15 * 60 * 1000;
-      return Number.isFinite(checked) && checked <= Date.now() && Date.now() - checked <= limit
+      return Number.isFinite(checked) && checked <= Date.now()
         && /^https:\/\/(www\.)?(twitch\.tv\/[A-Za-z0-9_]+|youtube\.com\/watch\?v=[A-Za-z0-9_-]+)$/.test(item.streamUrl || "");
     }).map((item) => ({
       name: clean(item.name),
@@ -120,7 +119,8 @@ function normalizeLivePayload(payload) {
       streamTitle: clean(item.streamTitle),
       streamUrl: clean(item.streamUrl),
       platform: clean(item.platform) || "twitch",
-      verifiedAt: clean(item.verifiedAt || payload.updatedAt)
+      verifiedAt: clean(item.verifiedAt || payload.updatedAt),
+      snapshot: Boolean(payload.stale) || Date.now() - Date.parse(item.verifiedAt || payload.updatedAt) > (item.platform === "youtube" ? 45 * 60 * 1000 : 15 * 60 * 1000)
     })),
     updatedAt: clean(payload.updatedAt),
     stale: Boolean(payload.stale) || !Number.isFinite(Date.parse(payload.updatedAt)) || Date.parse(payload.updatedAt) > Date.now() || Date.now() - Date.parse(payload.updatedAt) > 15 * 60 * 1000,
