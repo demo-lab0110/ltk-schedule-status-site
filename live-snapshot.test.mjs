@@ -55,15 +55,20 @@ test('card rendering restores original contents without observation paragraphs',
   assert.doesNotMatch(actual.innerHTML,/LIVE配信中/);
 });
 
-test('list heading shows JST update time and unconfirmed notice for fresh and stale snapshots',async()=>{
+test('list heading restores short labels; stale or individually old observations stay pending',async()=>{
   const src=fs.readFileSync('app.js','utf8');
   const start=src.indexOf('async function hydrateLiveStreams(options = {}) {'),end=src.indexOf('\nfunction ',start);
-  for(const stale of [false,true]){
+  for(const [stale,snapshot] of [[false,false],[true,false],[false,true]]){
     const status={};
-    const ctx=vm.createContext({Date,console,elements:{liveNowList:{},liveNowStatus:status},loadLiveStreams:async()=>({...base,stale,streams:[{name:'test'}]}),renderLiveNow(){},renderHeaderStatus(){}});
+    const ctx=vm.createContext({Date,console,elements:{liveNowList:{},liveNowStatus:status},loadLiveStreams:async()=>({...base,stale,streams:[{name:'test',snapshot}]}),renderLiveNow(){},renderHeaderStatus(){}});
     vm.runInContext(src.slice(start,end),ctx);await ctx.hydrateLiveStreams();
-    assert.match(status.textContent,/取得済み配信情報 1件/);assert.match(status.textContent,/17:00:00 JST/);
-    assert.match(status.textContent,/最終確認時点の情報/);assert.match(status.textContent,/現在の配信状況は未確認/);
+    if(stale||snapshot){assert.match(status.textContent,/配信情報の更新待ち/);assert.match(status.textContent,/17:00:00 JST/);}
+    else assert.equal(status.textContent,'確認できたLOL配信 1件（取得範囲内）');
+    assert.doesNotMatch(status.textContent,/取得済み配信情報|配信ごとの確認日時|最終確認時点の情報/);
     assert.doesNotMatch(status.textContent,/LIVE配信中/);
   }
+  const status={};
+  const ctx=vm.createContext({Date,console,elements:{liveNowList:{},liveNowStatus:status},loadLiveStreams:async()=>({...base,configured:false,stale:false,streams:[]}),renderLiveNow(){},renderHeaderStatus(){}});
+  vm.runInContext(src.slice(start,end),ctx);await ctx.hydrateLiveStreams();
+  assert.equal(status.textContent,'配信状況をまだ取得していません');
 });

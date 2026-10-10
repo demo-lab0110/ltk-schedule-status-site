@@ -307,8 +307,10 @@ async function hydrateLiveStreams(options = {}) {
     liveStreams = payload.streams || [];
     liveConfigured = Boolean(payload.configured) && !payload.stale;
     if (elements.liveNowStatus) {
-      elements.liveNowStatus.textContent = payload.configured || liveStreams.length
-        ? `取得済み配信情報 ${liveStreams.length}件（最終更新 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "確認時刻不明"}）。最終確認時点の情報です。現在の配信状況は未確認で、配信ごとの確認日時は異なる場合があります。`
+      elements.liveNowStatus.textContent = payload.stale || liveStreams.some((stream) => stream.snapshot)
+        ? `配信情報の更新待ち（最終確認 ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST" : "不明"}）`
+        : payload.configured
+        ? `確認できたLOL配信 ${liveStreams.length}件（取得範囲内）`
         : "配信状況をまだ取得していません";
     }
   } catch (error) {
