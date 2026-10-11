@@ -1,4 +1,19 @@
 export const MATCH_TIERS = ['NEXT', 'CORE', 'MASTERS'];
+// Listener matches rank only identified LTK players; stored result data is untouched.
+export function viewerDamageLeader(result, rows, participants) {
+  const listener = '__LISTENER__';
+  const teams = [...new Set([result.left, result.right].filter(team => team && team !== listener))];
+  if (!result.viewerMatch || teams.length !== 1 || !MATCH_TIERS.includes(result.tier)) return null;
+  const team = teams[0];
+  let leader = null;
+  for (const row of rows) {
+    if (row.matchId !== result.id || row.team !== team || row.tier !== result.tier || !row.name
+      || typeof row.damage !== 'number' || !Number.isFinite(row.damage) || row.damage < 0
+      || !participants.some(person => person.team === team && person.tier === result.tier && person.name === row.name)) continue;
+    if (!leader || row.damage > leader.damage) leader = row;
+  }
+  return leader;
+}
 export const DRAFT_COLUMNS = {
   BLUE: { BAN: [1, 3, 5, 14, 16], PICK: [7, 10, 11, 18, 19] },
   RED: { BAN: [2, 4, 6, 13, 15], PICK: [8, 9, 12, 17, 20] }

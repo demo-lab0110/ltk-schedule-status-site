@@ -1,7 +1,7 @@
 import { selectLtk4Sheets } from "./ltk4-selection.mjs";
 import { resolveCoachAssignments } from "./coach-assignment-model.mjs";
 import { coachAssignments } from "./ltk4-coaches.mjs";
-import { normalizeMatchResult, matchTierFromSchedule, childMatchTier, draftPosition } from "./match-semantics.mjs";
+import { normalizeMatchResult, matchTierFromSchedule, childMatchTier, draftPosition, viewerDamageLeader } from "./match-semantics.mjs";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
 const SITE_DATA_REFRESH_MS = 5 * 60 * 1000;
@@ -43,6 +43,19 @@ export async function loadSiteData(options = {}) {
   const schedules = buildSchedules(scheduleRows);
   const scrimResults = buildScrimResults(resultRows, teamRows, lookup, schedules);
   const matchContexts = new Map(scrimResults.map(row => [row.id, row]));
+  const damageRows = playerRows.map(row => ({
+    matchId: clean(row["試合ID"]),
+    team: isViewerTeamName(row["チーム名"]) ? VIEWER_TEAM_KEY : resolveTeam(row["チーム名"], teamRows, lookup) || compactTeamName(row["チーム名"]),
+    tier: childMatchTier(row, matchContexts.get(clean(row["試合ID"]))),
+    name: clean(row["プレイヤー名"]),
+    damage: optionalNumberValue(row["ダメージ"])
+  }));
+  for (const result of scrimResults) {
+    if (!result.viewerMatch) continue;
+    const leader = viewerDamageLeader(result, damageRows, participants);
+    result.carry = leader?.name || "";
+    result.maxDamage = leader?.damage ?? 0;
+  }
 
   return {
     updatedAt: clean(source.updatedAt),
