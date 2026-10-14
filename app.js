@@ -1433,12 +1433,21 @@ function renderFullCalendar(items) {
         requestAnimationFrame(() => requestAnimationFrame(() => {
           const popover = document.querySelector(".fc-more-popover");
           if (!popover) return;
-          const panel = popover.getBoundingClientRect();
-          const frame = elements.fullCalendar.getBoundingClientRect();
-          const minLeft = Math.max(frame.left, 0) + 8;
-          const maxRight = Math.min(frame.right, window.innerWidth) - 8;
-          const shift = panel.left < minLeft ? minLeft - panel.left : Math.min(0, maxRight - panel.right);
-          popover.style.left = `${popover.offsetLeft + shift}px`;
+          const fit = () => {
+            if (!popover.isConnected || !popover.getClientRects().length) return;
+            const panel = popover.getBoundingClientRect();
+            const frame = elements.fullCalendar.getBoundingClientRect();
+            const minLeft = Math.max(frame.left, 0) + 8;
+            const maxRight = Math.min(frame.right, window.innerWidth) - 8;
+            const shift = panel.left < minLeft ? minLeft - panel.left : Math.min(0, maxRight - panel.right);
+            if (Math.abs(shift) > 0.5) popover.style.left = `${popover.offsetLeft + shift}px`;
+          };
+          // FullCalendar can reposition the panel after its initial mount.
+          if (!popover.ltkFrameObserver) {
+            popover.ltkFrameObserver = new MutationObserver(fit);
+            popover.ltkFrameObserver.observe(popover, { attributes: true, attributeFilter: ["style"] });
+          }
+          fit();
         }));
         return "popover";
       },
