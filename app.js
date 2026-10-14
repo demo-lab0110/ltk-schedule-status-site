@@ -90,8 +90,6 @@ const state = {
   excludeScrims: true,
   excludeViewer: false,
   lastUpdatedAt: null,
-  fullCalendarExpanded: false,
-  fullCalendarExpandedDate: "",
   fullCalendar: null,
   playerStatsSort: { key: "kda", direction: "desc" },
   championStatsSort: { key: "presence", direction: "desc" },
@@ -1428,41 +1426,15 @@ function renderFullCalendar(items) {
       views: { ltk4Season: { type: "dayGrid", duration: { weeks: 7 } } },
       height: "auto",
       fixedWeekCount: false,
-      dayMaxEvents: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
-      dayMaxEventRows: state.fullCalendarExpanded ? false : FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
-      moreLinkClick(info) {
-        state.fullCalendarExpanded = true;
-        state.fullCalendarExpandedDate = dateKey(info.date);
-        elements.fullCalendar.classList.add("is-single-day-expanded");
-        state.fullCalendar.setOption("dayMaxEvents", false);
-        state.fullCalendar.setOption("dayMaxEventRows", false);
-        requestAnimationFrame(() => state.fullCalendar.updateSize());
-        return false;
-      },
+      dayMaxEvents: FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
+      dayMaxEventRows: FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
+      moreLinkClick: "popover",
       displayEventTime: false,
       eventOrder: "sortOrder",
       headerToolbar: { left: "", center: "title", right: "" },
       buttonText: { today: "今日" },
       dayCellClassNames(info) {
-        const key = dateKey(info.date);
-        return [
-          key === japanDateKey() ? "is-ltk-today" : "",
-          key === state.fullCalendarExpandedDate ? "is-ltk-expanded-day" : ""
-        ].filter(Boolean);
-      },
-      dayCellDidMount(info) {
-        const key = dateKey(info.date);
-        if (key !== state.fullCalendarExpandedDate) return;
-        const closeButton = document.createElement("button");
-        closeButton.type = "button";
-        closeButton.className = "fc-day-expand-close";
-        closeButton.textContent = "閉じる";
-        closeButton.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          collapseFullCalendarDay();
-        });
-        info.el.querySelector(".fc-daygrid-day-top")?.append(closeButton);
+        return dateKey(info.date) === japanDateKey() ? ["is-ltk-today"] : [];
       },
       eventContent(info) {
         return { domNodes: [calendarEventNode(info.event.extendedProps.item)] };
@@ -1483,16 +1455,6 @@ function renderFullCalendar(items) {
     state.calendarMode = "cards";
     applyCalendarMode();
   }
-}
-
-function collapseFullCalendarDay() {
-  state.fullCalendarExpanded = false;
-  state.fullCalendarExpandedDate = "";
-  elements.fullCalendar.classList.remove("is-single-day-expanded");
-  if (!state.fullCalendar) return;
-  state.fullCalendar.setOption("dayMaxEvents", FULL_CALENDAR_COLLAPSED_EVENT_LIMIT);
-  state.fullCalendar.setOption("dayMaxEventRows", FULL_CALENDAR_COLLAPSED_EVENT_LIMIT);
-  requestAnimationFrame(() => state.fullCalendar.updateSize());
 }
 
 function calendarEventNode(item) {
