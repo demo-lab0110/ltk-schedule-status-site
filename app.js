@@ -1428,7 +1428,20 @@ function renderFullCalendar(items) {
       fixedWeekCount: false,
       dayMaxEvents: FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
       dayMaxEventRows: FULL_CALENDAR_COLLAPSED_EVENT_LIMIT,
-      moreLinkClick: "popover",
+      moreLinkClick() {
+        // Keep the native close control inside the existing horizontal scroll frame.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const popover = document.querySelector(".fc-more-popover");
+          if (!popover) return;
+          const panel = popover.getBoundingClientRect();
+          const frame = elements.fullCalendar.getBoundingClientRect();
+          const minLeft = Math.max(frame.left, 0) + 8;
+          const maxRight = Math.min(frame.right, window.innerWidth) - 8;
+          const shift = panel.left < minLeft ? minLeft - panel.left : Math.min(0, maxRight - panel.right);
+          popover.style.left = `${popover.offsetLeft + shift}px`;
+        }));
+        return "popover";
+      },
       displayEventTime: false,
       eventOrder: "sortOrder",
       headerToolbar: { left: "", center: "title", right: "" },
