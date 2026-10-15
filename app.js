@@ -2042,6 +2042,12 @@ function isRankingRosterPlayer(row) {
   return participants.some((person) => person.name === row.name && person.team === row.team && person.tier === row.tier);
 }
 
+function isIndividualStatsExcluded(row) {
+  // Owner-approved NEXT substitute appearance; preserve the original match row.
+  return row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_003"
+    && row.team === "IT" && row.name === "らいじん";
+}
+
 function rankingTeamGameCounts() {
   const counts = new Map();
   leagueScrimResults()
@@ -2772,7 +2778,7 @@ function teamDraftPanel(teamKey, results) {
 
 function teamMetricPanels(teamKey, results) {
   const resultIds = new Set(results.map((result) => result.id));
-  const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey);
+  const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey && !isIndividualStatsExcluded(row));
   const goldDiff14 = averageGold14(results, teamKey);
   const maxDpm = rows
     .map((row) => {
@@ -2930,6 +2936,7 @@ function buildPlayerStatsFromRows(rows) {
   });
   rows.forEach((row) => {
     const key = `${row.team}__${row.name}__${row.role}`;
+    if (isIndividualStatsExcluded(row)) return;
     if (!map.has(key)) map.set(key, { name: row.name, team: row.team, role: row.role, matches: 0, wins: 0, kills: 0, deaths: 0, assists: 0, dpmDamage: 0, dpmMinutes: 0, cs14: 0, cs14Matches: 0, kpTotal: 0, kpMatches: 0, damageShareTotal: 0, damageShareMatches: 0, goldShareTotal: 0, goldShareMatches: 0, championCounts: new Map() });
     const item = map.get(key);
     item.matches += 1;
@@ -3825,7 +3832,7 @@ function leagueScrimResults() {
 }
 
 function competitivePlayerMatches() {
-  return playerMatches.filter((row) => row.name && row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
+  return playerMatches.filter((row) => row.name && !isIndividualStatsExcluded(row) && row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
 }
 
 function matchDurationMinutes(matchId) {
