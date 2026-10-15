@@ -195,7 +195,8 @@ function buildSchedules(rows) {
       return {
         id: clean(row.schedule_id),
         date: dateValue(row.event_date),
-        eventTime: eventTimeValue(row.event_time),
+        eventTime: eventTimeValue(clean(row.event_time).replace(/^約\s*/, "")),
+        eventTimeApproximate: /^約\s*/.test(clean(row.event_time)),
         matchName: clean(row.match_name) || clean(row.schedule_id),
         displayTitle: clean(row.display_title),
         day: clean(row.day_label),

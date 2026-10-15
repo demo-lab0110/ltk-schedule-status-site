@@ -1,8 +1,8 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { averageGold14 } from "./gold-diff14.mjs";
 import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
-import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-gold-diff14";
+import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261015-approx-time";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-approx-time";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1491,14 +1491,14 @@ function calendarEventNode(item) {
         <span class="fc-event-vs">vs</span>
         <span class="fc-match-team"><span>${teamShortName(pair.right)}</span>${calendarTeamIcon(pair.right)}</span>
       </div>`).join("")}</div>
-      <div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime))} / ${escapeAttr(item.tier)}</span></div>`;
+      <div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime, item.eventTimeApproximate))} / ${escapeAttr(item.tier)}</span></div>`;
     return node;
   }
   const tier = item.tier && item.tier !== "NEXT/CORE" ? item.tier : "";
   const caption = calendarMatchCaption(item);
   if (!item.left && !item.right && item.displayTitle) {
     node.classList.add("is-announcement");
-    node.innerHTML = `<div class="fc-match-title">${escapeAttr(tbdDisplayTitle(item))}</div><div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime))}</span></div>`;
+    node.innerHTML = `<div class="fc-match-title">${escapeAttr(tbdDisplayTitle(item))}</div><div class="fc-match-sub"><span>${escapeAttr(formatCalendarTime(item.eventTime, item.eventTimeApproximate))}</span></div>`;
     return node;
   }
   if (isViewerScrim(item)) {
@@ -1556,9 +1556,9 @@ function tbdDisplayTitle(item) {
 function calendarMatchCaption(item) {
   if (/^LTK4_/.test(item.id || "")) {
     const stage = { REGULAR: "Regular Stage", MASTERS: "Masters Cup", PLAYOFFS: "Playoffs" }[item.stage] || item.stage;
-    return [formatCalendarTime(item.eventTime), stage, item.day, item.match ? `M${item.match}` : ""].filter(Boolean).join(" / ");
+    return [formatCalendarTime(item.eventTime, item.eventTimeApproximate), stage, item.day, item.match ? `M${item.match}` : ""].filter(Boolean).join(" / ");
   }
-  return [formatCalendarTime(item.eventTime), calendarMatchName(item)].filter(Boolean).join(" / ");
+  return [formatCalendarTime(item.eventTime, item.eventTimeApproximate), calendarMatchName(item)].filter(Boolean).join(" / ");
 }
 
 function calendarSortKey(item) {
@@ -1733,7 +1733,7 @@ function openMatch(item, options = {}) {
     right_team: item.right || "",
     source_view: state.view
   });
-  elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} ${formatCalendarTime(item.eventTime)} ${item.day} ${item.match} / ${item.type}`;
+  elements.dialogMeta.textContent = `${item.date.replaceAll("-", "/")} ${formatCalendarTime(item.eventTime, item.eventTimeApproximate)} ${item.day} ${item.match} / ${item.type}`;
   elements.dialogTitle.textContent = isViewerScrim(item)
     ? `${viewerHomeLabel(item)} vs ${VIEWER_OPPONENT_LABEL}`
     : item.status === "tbd" ? "TBD" : `${item.left || "TBD"} vs ${item.right || "TBD"}`;
