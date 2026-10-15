@@ -258,8 +258,8 @@ function buildScrimResults(rows, teamRows, lookup, schedules) {
         time: timeValue(row["試合時間"]),
         leftKda: clean(row["チーム1KDA"]),
         rightKda: clean(row["チーム2KDA"]),
-        leftGold: numberValue(row["チーム1ゴールド"]),
-        rightGold: numberValue(row["チーム2ゴールド"]),
+        leftGold: optionalNumberValue(row["チーム1ゴールド"]),
+        rightGold: optionalNumberValue(row["チーム2ゴールド"]),
         goldDiff15: goldDiff15Value(row),
         carry: clean(row["最大ダメージ選手"]),
         maxDamage: numberValue(row["最大ダメージ"]),
@@ -315,7 +315,7 @@ function buildPlayerMatches(rows, teamRows, lookup, matchContexts) {
         damage: numberValue(row["ダメージ"]),
         cs15: optionalNumberValue(row["15分CS"]),
         cs14: readCs14(row),
-        gold: numberValue(row["ゴールド"])
+        gold: optionalNumberValue(row["ゴールド"])
       };
     });
 }

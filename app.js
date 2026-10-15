@@ -1,7 +1,7 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261010-match-semantics";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-missing-gold";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1816,7 +1816,7 @@ function resultSummary(item) {
     <div><span>勝利</span><strong>${item.winner}</strong></div>
     <div><span>試合時間</span><strong>${formatMatchDurationLabel(item.time)}</strong></div>
     <div><span>KDA</span><strong>${item.leftKda} / ${item.rightKda}</strong></div>
-    <div><span>Gold</span><strong>${formatNumber(item.leftGold)} / ${formatNumber(item.rightGold)}</strong></div>
+    <div><span>Gold</span><strong>${formatGold(item.leftGold)} / ${formatGold(item.rightGold)}</strong></div>
     <div><span>最大DMG</span><strong>${item.carry} ${formatNumber(item.maxDamage)}</strong></div>
   `;
   return section;
@@ -1967,7 +1967,7 @@ function gameDetailTeam(teamKey, rows) {
               <td><span class="game-champion">${champIcon(row.champion)}<span>${row.champion}</span></span></td>
               <td>${row.kills}/${row.deaths}/${row.assists}</td>
               <td>${row.damage ? formatNumber(row.damage) : "-"}</td>
-              <td>${row.gold ? formatNumber(row.gold) : "-"}</td>
+              <td>${formatGold(row.gold)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -2557,7 +2557,7 @@ function renderTeamStats() {
           <td>${percent(row.wins / row.matches)}</td>
           <td>${formatTeamKda(row)}</td>
           <td>${row.dpm == null ? "-" : formatDecimal(row.dpm)}</td>
-          <td>${row.avgGold == null ? "-" : formatInteger(row.avgGold)}</td>
+          <td>${formatGold(row.avgGold)}</td>
           <td>${formatInteger(row.mvp)}</td>
         </tr>
       `).join("")}
@@ -2728,7 +2728,7 @@ function teamOverviewCards(item, results) {
       ${teamStatCard("Record", `${item.wins}-${item.losses}`, `${percent(item.wins / item.matches)} Win`)}
       ${teamStatCard("KDA", formatTeamKda(item), "Team total")}
       ${teamStatCard("DPM", item.dpm == null ? "-" : formatDecimal(item.dpm), "Team damage/min")}
-      ${teamStatCard("Avg Gold", item.avgGold == null ? "-" : formatInteger(item.avgGold), "Result screen")}
+      ${teamStatCard("Avg Gold", formatGold(item.avgGold), "Result screen")}
       ${teamStatCard("Avg Time", avgTime == null ? "-" : `${formatDecimal(avgTime)}m`, "Known games")}
       ${teamStatCard("MVP", formatInteger(item.mvp), "MVP count")}
     </section>
@@ -3040,7 +3040,7 @@ function teamMatchLog(teamKey, results) {
                   </td>
                   <td>${win ? "WIN" : "LOSE"}</td>
                   <td>${side === "left" ? result.leftKda : result.rightKda}</td>
-                  <td>${formatInteger(side === "left" ? result.leftGold : result.rightGold)}</td>
+                  <td>${formatGold(side === "left" ? result.leftGold : result.rightGold)}</td>
                   <td>${result.carry ? `${result.carry} ${formatInteger(result.maxDamage)}` : "-"}</td>
                   <td>${result.mvp || "-"}</td>
                 </tr>
@@ -4161,6 +4161,11 @@ function denormalizeChampionName(value) {
     .replace(/Ⅲ/g, "III")
     .replace(/Ⅱ/g, "II")
     .replace(/Ⅰ/g, "I");
+}
+
+function formatGold(value) {
+  if (value == null || String(value).trim() === "" || !Number.isFinite(Number(value))) return "—";
+  return formatInteger(value);
 }
 
 function formatNumber(value) {
