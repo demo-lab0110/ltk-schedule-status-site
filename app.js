@@ -2043,8 +2043,10 @@ function isRankingRosterPlayer(row) {
 }
 
 function isIndividualStatsExcluded(row) {
-  // Owner-approved NEXT substitute appearance; preserve the original match row.
-  return row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_003"
+  // Owner-approved NEXT substitute appearances; preserve original match rows.
+  return (row.matchId === "SCRIM_20261014_NEXT_CC_LISTENERS_001"
+    && row.team === "CC" && row.name === "歌衣メイカ")
+    || row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_003"
     && row.team === "IT" && row.name === "らいじん";
 }
 
@@ -3831,8 +3833,8 @@ function leagueScrimResults() {
   return scrimResults.filter((row) => row.left && row.right && row.winner);
 }
 
-function competitivePlayerMatches() {
-  return playerMatches.filter((row) => row.name && !isIndividualStatsExcluded(row) && row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
+function competitivePlayerMatches(includeExcluded = false) {
+  return playerMatches.filter((row) => row.name && (includeExcluded || !isIndividualStatsExcluded(row)) && row.team !== VIEWER_TEAM_KEY && (!state.team || row.team === state.team) && matchPassesGlobalFilters(row.matchId));
 }
 
 function matchDurationMinutes(matchId) {
@@ -4052,7 +4054,7 @@ function playerIcon(name) {
 
 function teamKillParticipation(item) {
   const teamKillsByMatch = new Map();
-  const rows = competitivePlayerMatches();
+  const rows = competitivePlayerMatches(true);
   rows.forEach((row) => {
     const key = `${row.matchId}__${row.team}`;
     teamKillsByMatch.set(key, (teamKillsByMatch.get(key) || 0) + row.kills);
@@ -4060,7 +4062,7 @@ function teamKillParticipation(item) {
   let total = 0;
   let count = 0;
   rows
-    .filter((row) => row.name === item.name)
+    .filter((row) => row.name === item.name && !isIndividualStatsExcluded(row))
     .forEach((row) => {
       const teamKills = teamKillsByMatch.get(`${row.matchId}__${row.team}`) || 0;
       if (teamKills > 0) {
@@ -4073,7 +4075,7 @@ function teamKillParticipation(item) {
 
 function teamDamageShare(item) {
   const teamDamageByMatch = new Map();
-  const rows = competitivePlayerMatches();
+  const rows = competitivePlayerMatches(true);
   rows.forEach((row) => {
     const key = `${row.matchId}__${row.team}`;
     teamDamageByMatch.set(key, (teamDamageByMatch.get(key) || 0) + row.damage);
@@ -4081,7 +4083,7 @@ function teamDamageShare(item) {
   let total = 0;
   let count = 0;
   rows
-    .filter((row) => row.name === item.name)
+    .filter((row) => row.name === item.name && !isIndividualStatsExcluded(row))
     .forEach((row) => {
       const teamDamage = teamDamageByMatch.get(`${row.matchId}__${row.team}`) || 0;
       if (teamDamage > 0) {

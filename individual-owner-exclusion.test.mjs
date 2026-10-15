@@ -9,3 +9,22 @@ test('team player summary excludes substitute while keeping his values in teamma
  const regular={...target,name:'まいたけ',role:'MID',kills:2,assists:6,deaths:2,damage:17678,gold:12334};
  const c=vm.createContext({Map,Set,Number,matchDurationMinutes:()=>37.1,isNoBanChampion:()=>false,recordMatchResult:(x,r)=>{if(r==='WIN')x.wins++}});vm.runInContext(fn('isIndividualStatsExcluded')+fn('buildPlayerStatsFromRows'),c);const rows=[target,regular];const before=JSON.stringify(rows);const result=c.buildPlayerStatsFromRows(rows);assert.equal(result.length,1);assert.equal(result[0].name,'まいたけ');assert.equal(result[0].damageShare,17678/(32724+17678));assert.equal(result[0].goldShare,12334/(17568+12334));assert.equal(JSON.stringify(rows),before);
 });
+
+const meika={...target,matchId:'SCRIM_20261014_NEXT_CC_LISTENERS_001',team:'CC',name:'歌衣メイカ',kills:1,deaths:0,assists:10,damage:15206,gold:11474};
+test('Meika exclusion is limited to the approved match/team/name tuple',()=>{
+ const other=[{...meika,matchId:'OTHER'},{...meika,team:'IT'},{...meika,name:'REGULAR'}];
+ const c=vm.createContext({playerMatches:[meika,...other,target],VIEWER_TEAM_KEY:'__LISTENER__',state:{team:''},matchPassesGlobalFilters:()=>true});vm.runInContext(fn('isIndividualStatsExcluded')+fn('competitivePlayerMatches'),c);
+ assert.equal(c.isIndividualStatsExcluded(meika),true);for(const row of other)assert.equal(c.isIndividualStatsExcluded(row),false);
+ assert.equal(c.competitivePlayerMatches().length,3);assert.equal(c.playerMatches.length,5);assert.equal(c.playerMatches[0].damage,15206);assert.equal(c.isIndividualStatsExcluded(target),true);
+});
+test('Meika remains in teammate denominators and original rows while absent from individual summary',()=>{
+ const regular={...meika,name:'REGULAR',role:'MID',damage:20000,gold:15000};const rows=[meika,regular],before=JSON.stringify(rows);
+ const c=vm.createContext({Map,Set,Number,matchDurationMinutes:()=>31.92,isNoBanChampion:()=>false,recordMatchResult:(x,r)=>{if(r==='WIN')x.wins++}});vm.runInContext(fn('isIndividualStatsExcluded')+fn('buildPlayerStatsFromRows'),c);
+ const result=c.buildPlayerStatsFromRows(rows);assert.equal(result.length,1);assert.equal(result[0].name,'REGULAR');assert.equal(result[0].damageShare,20000/(15206+20000));assert.equal(result[0].goldShare,15000/(11474+15000));assert.equal(JSON.stringify(rows),before);
+});
+
+test('individual KP and damage share retain substitute values in team totals',()=>{
+ const regular={...meika,name:'REGULAR',kills:4,assists:5,damage:20000};
+ const c=vm.createContext({Map,playerMatches:[meika,regular],VIEWER_TEAM_KEY:'__LISTENER__',state:{team:''},matchPassesGlobalFilters:()=>true});vm.runInContext(fn('isIndividualStatsExcluded')+fn('competitivePlayerMatches')+fn('teamKillParticipation')+fn('teamDamageShare'),c);
+ assert.equal(c.teamKillParticipation(regular),9/5);assert.equal(c.teamDamageShare(regular),20000/(15206+20000));assert.equal(c.teamKillParticipation(meika),0);assert.equal(c.teamDamageShare(meika),0);
+});
