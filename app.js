@@ -1,7 +1,7 @@
 import { groupParticipants } from "./participant-groups.mjs";
 import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-missing-gold";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-ranking-roster";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -2030,11 +2030,15 @@ function participantCard(person) {
 
 function renderRankings() {
   const teamGameCounts = rankingTeamGameCounts();
-  const stats = buildPlayerStats()
+  const stats = buildPlayerStats(competitivePlayerMatches().filter(isRankingRosterPlayer))
     .filter((item) => !state.team || item.team === state.team)
     .filter((item) => isRankingEligible(item, teamGameCounts))
     .filter((item) => filterByKeyword([item], (x) => `${x.name} ${x.champions} ${x.team}`)[0]);
   elements.rankingBoard.replaceChildren(...["NEXT", "CORE", "MASTERS"].map((tier) => rankingTier(tier, stats.filter((item) => item.tier === tier))));
+}
+
+function isRankingRosterPlayer(row) {
+  return participants.some((person) => person.name === row.name && person.team === row.team && person.tier === row.tier);
 }
 
 function rankingTeamGameCounts() {
@@ -3620,10 +3624,10 @@ function playerTeamLabel(teamKey) {
   return `<span class="player-match-label player-team-label">${teamLogo(teamKey, "ranking-team-logo")}<span>${teamShortName(teamKey)}</span></span>`;
 }
 
-function buildPlayerStats() {
+function buildPlayerStats(rows = competitivePlayerMatches()) {
   const map = new Map();
   const resultById = new Map(scrimResults.map((row) => [row.id, row]));
-  competitivePlayerMatches().forEach((row) => {
+  rows.forEach((row) => {
     const key = row.name;
     if (!map.has(key)) {
       map.set(key, { name: row.name, team: row.team, tier: row.tier, role: row.role, matches: 0, wins: 0, mvp: 0, kills: 0, deaths: 0, assists: 0, damage: 0, dpmDamage: 0, dpmMinutes: 0, cs14: 0, cs14Matches: 0, gold: 0, maxDamageGame: 0, maxKillsGame: 0, champions: new Set() });
