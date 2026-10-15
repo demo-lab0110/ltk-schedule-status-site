@@ -1,6 +1,7 @@
 import { selectLtk4Sheets } from "./ltk4-selection.mjs";
 import { resolveCoachAssignments } from "./coach-assignment-model.mjs";
 import { coachAssignments } from "./ltk4-coaches.mjs";
+import { matchGold14 } from "./gold-diff14.mjs";
 import { normalizeMatchResult, matchTierFromSchedule, childMatchTier, draftPosition, viewerDamageLeader } from "./match-semantics.mjs";
 const STATIC_SITE_DATA_URL = "./site-data.json";
 const STATIC_LIVE_DATA_URL = "./live-data.json";
@@ -43,6 +44,9 @@ export async function loadSiteData(options = {}) {
   const schedules = buildSchedules(scheduleRows);
   const scrimResults = buildScrimResults(resultRows, teamRows, lookup, schedules);
   const matchContexts = new Map(scrimResults.map(row => [row.id, row]));
+  const playerMatches = buildPlayerMatches(playerRows, teamRows, lookup, matchContexts);
+  const summariesById = new Map(resultRows.map(row => [clean(row["試合ID"]), row]));
+  for (const result of scrimResults) result.gold14 = matchGold14(result, summariesById.get(result.id), playerMatches);
   const damageRows = playerRows.map(row => ({
     matchId: clean(row["試合ID"]),
     team: isViewerTeamName(row["チーム名"]) ? VIEWER_TEAM_KEY : resolveTeam(row["チーム名"], teamRows, lookup) || compactTeamName(row["チーム名"]),
@@ -65,7 +69,7 @@ export async function loadSiteData(options = {}) {
     scrimResults,
     participants,
     coaches,
-    playerMatches: buildPlayerMatches(playerRows, teamRows, lookup, matchContexts),
+    playerMatches,
     bpRows: buildBpRows(bpSourceRows, teamRows, lookup, matchContexts),
     championIcons: buildChampionIcons(championRows),
     clipVideos: buildClipVideos(clipRows, teamRows, lookup),

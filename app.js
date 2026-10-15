@@ -1,7 +1,8 @@
 import { groupParticipants } from "./participant-groups.mjs";
+import { averageGold14 } from "./gold-diff14.mjs";
 import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261009-masters-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-ranking-roster";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-gold-diff14";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -2772,14 +2773,7 @@ function teamDraftPanel(teamKey, results) {
 function teamMetricPanels(teamKey, results) {
   const resultIds = new Set(results.map((result) => result.id));
   const rows = playerMatches.filter((row) => resultIds.has(row.matchId) && row.team === teamKey);
-  const goldDiff15Values = results
-    .map((result) => {
-      if (!Number.isFinite(result.goldDiff15)) return null;
-      if (result.left === teamKey) return result.goldDiff15;
-      if (result.right === teamKey) return -result.goldDiff15;
-      return null;
-    })
-    .filter((value) => Number.isFinite(value));
+  const goldDiff14 = averageGold14(results, teamKey);
   const maxDpm = rows
     .map((row) => {
       const minutes = matchDurationMinutes(row.matchId);
@@ -2795,7 +2789,7 @@ function teamMetricPanels(teamKey, results) {
         <span>リザルト画像ベース</span>
       </div>
       <div class="team-overview-grid">
-        ${teamStatCard("Gold diff@15", goldDiff15Values.length ? formatSignedInteger(goldDiff15Values.reduce((sum, value) => sum + value, 0) / goldDiff15Values.length) : "-", "Team average")}
+        ${teamStatCard("14分平均Gold差", goldDiff14.count ? formatSignedInteger(goldDiff14.value) : "-", `対象 ${goldDiff14.count}試合 / G`)}
         ${teamStatCard("Top DPM", maxDpm ? `${maxDpm.row.name} ${formatDecimal(maxDpm.dpm)}` : "-", "Best game")}
         ${teamStatCard("Top Damage", maxDamage ? `${maxDamage.name} ${formatInteger(maxDamage.damage)}` : "-", "Best game")}
       </div>
