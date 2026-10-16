@@ -1799,7 +1799,7 @@ function resultSummary(item) {
       button.type = "button";
       button.innerHTML = `
         <span>Game${index + 1}</span>
-        <strong>WIN ${winnerDisplayName(result)}</strong>
+        <strong>${result.winner ? `WIN ${winnerDisplayName(result)}` : "勝敗未確認"}</strong>
         <small>${formatMatchDurationLabel(result.time)} / ${result.leftKda} - ${result.rightKda}</small>
         <em>クリックして詳細を表示</em>
       `;
@@ -1845,10 +1845,10 @@ function gameDetailTitle(result) {
   const winner = result.winner;
   const label = result.match?.startsWith("G") ? result.match.replace(/^G/, "Game") : result.match || result.id;
   return `
-    <span>${label} / WIN</span>
+    <span>${label} / ${winner ? "WIN" : "勝敗未確認"}</span>
     <span class="game-detail-winner">
-      ${winner !== VIEWER_TEAM_KEY ? teamLogo(winner, "ranking-team-logo") : ""}
-      <span>${winnerDisplayName(result)}</span>
+      ${winner && winner !== VIEWER_TEAM_KEY ? teamLogo(winner, "ranking-team-logo") : ""}
+      <span>${winner ? winnerDisplayName(result) : "勝敗未確認"}</span>
     </span>
   `;
 }
