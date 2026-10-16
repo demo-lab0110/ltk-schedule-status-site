@@ -2047,7 +2047,10 @@ function isIndividualStatsExcluded(row) {
   return (row.matchId === "SCRIM_20261014_NEXT_CC_LISTENERS_001"
     && row.team === "CC" && row.name === "歌衣メイカ")
     || row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_003"
-    && row.team === "IT" && row.name === "らいじん";
+    && row.team === "IT" && row.name === "らいじん"
+    || (row.matchId === "LTK4_REGULAR_D1_M1_RESULT" && row.team === "CC" && row.name === "歌衣メイカ")
+    || (row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_PREMAIN_001" && row.team === "IT" && row.name === "Enty")
+    || (row.matchId === "SCRIM_20261015_NEXT_CC_LISTENERS_PREMAIN_001" && row.team === "CC" && row.name === "歌衣メイカ");
 }
 
 function rankingTeamGameCounts() {
