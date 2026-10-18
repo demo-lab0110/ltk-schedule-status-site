@@ -2044,7 +2044,9 @@ function isRankingRosterPlayer(row) {
 
 function isIndividualStatsExcluded(row) {
   // Owner-approved NEXT substitute appearances; preserve original match rows.
-  return (row.matchId === "SCRIM_20261014_NEXT_CC_LISTENERS_001"
+  return (row.team === "IT" && row.name === "Enty"
+    && ["SCRIM_20261018_CORE_LR_IT_001", "SCRIM_20261018_CORE_LR_IT_002", "SCRIM_20261018_CORE_LR_IT_003"].includes(row.matchId))
+    || (row.matchId === "SCRIM_20261014_NEXT_CC_LISTENERS_001"
     && row.team === "CC" && row.name === "歌衣メイカ")
     || row.matchId === "SCRIM_20261015_NEXT_IT_LISTENERS_003"
     && row.team === "IT" && row.name === "らいじん"
