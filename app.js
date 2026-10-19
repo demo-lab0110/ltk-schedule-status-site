@@ -2,7 +2,7 @@ import { groupParticipants } from "./participant-groups.mjs";
 import { averageGold14 } from "./gold-diff14.mjs";
 import { recordMatchResult, matchRecordLabel, matchWinRate, hasKnownBpFlow } from "./match-semantics.mjs?v=20261010-known-bp-flow";
 import { buildCalendarDisplayItems, formatCalendarTime } from "./calendar-display.mjs?v=20261015-approx-time";
-﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261015-approx-time";
+﻿import { loadLiveStreams, loadSiteData } from "./sheet-loader.js?v=20261019-ccp03-missing-kda";
 
 const VIEWER_OPPONENT_LABEL = "リスナー";
 const VIEWER_TEAM_KEY = "__LISTENER__";
@@ -1966,7 +1966,7 @@ function gameDetailTeam(teamKey, rows) {
               <td>${row.role}</td>
               <td>${gameDetailPlayerName(row, index, teamKey)}</td>
               <td><span class="game-champion">${champIcon(row.champion)}<span>${row.champion}</span></span></td>
-              <td>${row.kills}/${row.deaths}/${row.assists}</td>
+              <td>${playerKdaLabel(row)}</td>
               <td>${row.damage ? formatNumber(row.damage) : "-"}</td>
               <td>${formatGold(row.gold)}</td>
             </tr>
@@ -2044,7 +2044,9 @@ function isRankingRosterPlayer(row) {
 
 function isIndividualStatsExcluded(row) {
   // Owner-approved NEXT substitute appearances; preserve original match rows.
-  return (row.team === "IT" && row.name === "Enty"
+  // Owner-directed listener surrender: team result retained; not an early remake.
+  return row.matchId === "SCRIM_20261019_CORE_CC_LISTENERS_003"
+    || (row.team === "IT" && row.name === "Enty"
     && ["SCRIM_20261018_CORE_LR_IT_001", "SCRIM_20261018_CORE_LR_IT_002", "SCRIM_20261018_CORE_LR_IT_003"].includes(row.matchId))
     || (row.matchId === "SCRIM_20261014_NEXT_CC_LISTENERS_001"
     && row.team === "CC" && row.name === "歌衣メイカ")
@@ -2324,7 +2326,7 @@ function playerMatchLog(rows) {
                   <td>${playerMatchLabel(row, match)}</td>
                   <td>${row.result}</td>
                   <td><span class="game-champion">${champIcon(row.champion)}<span>${row.champion}</span></span></td>
-                  <td>${row.kills}/${row.deaths}/${row.assists}</td>
+                  <td>${playerKdaLabel(row)}</td>
                   <td>${minutes ? formatDecimal(row.damage / minutes) : "-"}</td>
                   <td>${Number.isFinite(row.cs14) && row.cs14 >= 0 ? formatInteger(row.cs14) : "-"}</td>
                   <td>${opponent ? `<span class="game-champion opponent-champion"><em>vs</em>${champIcon(opponent.champion)}<span>${opponent.champion}</span></span>` : "-"}</td>
@@ -3606,7 +3608,7 @@ function championMatchLog(rows) {
                   <td>${row.role}</td>
                   <td>${playerMatchLabel(row, match)}</td>
                   <td>${row.result}</td>
-                  <td>${row.kills}/${row.deaths}/${row.assists}</td>
+                  <td>${playerKdaLabel(row)}</td>
                   <td>${minutes ? formatDecimal(row.damage / minutes) : "-"}</td>
                   <td>${Number.isFinite(row.cs14) && row.cs14 >= 0 ? formatInteger(row.cs14) : "-"}</td>
                 </tr>
@@ -4283,4 +4285,8 @@ function participantDirectoryCard(person, coachDuty = null){
 function rosterUrl(value,host="") {
   if (!value) return "";
   try {const url=new URL(String(value));return url.protocol==="https:" && (!host || url.hostname===host || url.hostname.endsWith("."+host)) ? url.href : "";} catch {return "";}
+}
+
+function playerKdaLabel(row) {
+  return row.kdaMissing ? "-" : `${row.kills}/${row.deaths}/${row.assists}`;
 }

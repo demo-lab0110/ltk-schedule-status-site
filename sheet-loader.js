@@ -314,6 +314,7 @@ function buildPlayerMatches(rows, teamRows, lookup, matchContexts) {
         champion: clean(row["チャンピオン名"]),
         result: resultConflict ? "UNKNOWN" : result,
         resultConflict,
+        kdaMissing: [row.K, row.D, row.A].some((value) => optionalNumberValue(value) === null),
         kills: numberValue(row.K),
         deaths: numberValue(row.D),
         assists: numberValue(row.A),
